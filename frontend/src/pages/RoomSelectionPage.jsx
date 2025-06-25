@@ -6,9 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Plus, Users, Copy } from 'lucide-react';
-import AuthPanel from '@/components/AuthPanel';
 import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
 import { Badge } from '@/components/ui/badge';
+import { sendEmailVerification } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -22,6 +23,9 @@ export default function RoomSelectionPage() {
     const [tab, setTab] = useState('owned');
     const [tabRooms, setTabRooms] = useState([]);
     const [tabLoading, setTabLoading] = useState(false);
+    const [verificationSent, setVerificationSent] = useState(false);
+    const [resendLoading, setResendLoading] = useState(false);
+    const [resendError, setResendError] = useState("");
 
     useEffect(() => {
         if (user) {
@@ -47,6 +51,19 @@ export default function RoomSelectionPage() {
         };
         fetchTabRooms();
     }, [user, tab]);
+
+    // Auto-refresh for email verification
+    useEffect(() => {
+        if (user && !user.emailVerified) {
+            const interval = setInterval(async () => {
+                await auth.currentUser.reload();
+                if (auth.currentUser.emailVerified) {
+                    window.location.reload();
+                }
+            }, 3000);
+            return () => clearInterval(interval);
+        }
+    }, [user]);
 
     const fetchRooms = async () => {
         try {
@@ -112,10 +129,40 @@ export default function RoomSelectionPage() {
         return <div className="flex items-center justify-center h-screen">Loading...</div>;
     }
 
+    if (user && !user.emailVerified) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#18181b] via-[#23272f] to-[#1e293b] text-zinc-100">
+                <div className="w-full max-w-md bg-zinc-900/90 rounded-xl shadow-2xl border border-zinc-800 p-8 flex flex-col items-center">
+                    <span className="text-3xl font-extrabold bg-gradient-to-r from-indigo-400 via-fuchsia-400 to-pink-400 bg-clip-text text-transparent mb-2">DevSync</span>
+                    <span className="text-zinc-400 text-sm mb-6">Collaborate. Code. Run — Together in Real-Time.</span>
+                    <h2 className="text-xl font-bold mb-2 text-center">Verify Your Email</h2>
+                    <p className="mb-4 text-center text-zinc-300">
+                        A verification link has been sent to <span className="font-semibold text-indigo-300">{user.email}</span>.<br />
+                        Please verify your email to continue.
+                    </p>
+                    <Button onClick={async () => {
+                        setResendLoading(true);
+                        setResendError("");
+                        try {
+                            await sendEmailVerification(auth.currentUser);
+                            setVerificationSent(true);
+                        } catch (err) {
+                            setResendError("Failed to send verification email.");
+                        } finally {
+                            setResendLoading(false);
+                        }
+                    }} disabled={resendLoading || verificationSent} className="mb-2 w-full">
+                        {resendLoading ? 'Sending...' : verificationSent ? 'Verification Sent' : 'Resend Verification Email'}
+                    </Button>
+                    {resendError && <div className="text-red-400 text-sm text-center mb-2">{resendError}</div>}
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen bg-background p-6">
             <div className="max-w-4xl mx-auto">
-                <AuthPanel />
                 <header className="text-center mb-8">
                     <h1 className="text-4xl font-bold mb-2">Collaborative Code Editor</h1>
                     <p className="text-muted-foreground">
