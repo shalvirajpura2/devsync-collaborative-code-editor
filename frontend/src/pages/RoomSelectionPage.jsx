@@ -17,11 +17,13 @@ export default function RoomSelectionPage() {
     const [joinRoomId, setJoinRoomId] = useState('');
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
-    const { user } = useFirebaseAuth();
+    const { user, loading: authLoading } = useFirebaseAuth();
 
     useEffect(() => {
-        fetchRooms();
-    }, []);
+        if (user) {
+            fetchRooms();
+        }
+    }, [user]);
 
     const fetchRooms = async () => {
         try {
@@ -71,6 +73,21 @@ export default function RoomSelectionPage() {
             alert(error.response?.data?.detail || 'Failed to share room');
         }
     };
+
+    const shareRoomByEmail = async (roomId) => {
+        const email = prompt('Enter the email of the user to share with:');
+        if (!email) return;
+        try {
+            const response = await api.post(`/api/rooms/${roomId}/share-by-email`, { email });
+            alert(response.data.message);
+        } catch (error) {
+            alert(error.response?.data?.detail || 'Failed to share room by email');
+        }
+    };
+
+    if (authLoading) {
+        return <div className="flex items-center justify-center h-screen">Loading...</div>;
+    }
 
     return (
         <div className="min-h-screen bg-background p-6">
@@ -151,9 +168,14 @@ export default function RoomSelectionPage() {
                                                 </div>
                                                 <Button onClick={() => joinRoom(room._id)}>Join Room</Button>
                                                 {user && room.owner === user.uid && (
-                                                    <Button variant="outline" onClick={() => shareRoom(room._id)}>
-                                                        Share
-                                                    </Button>
+                                                    <>
+                                                        <Button variant="outline" onClick={() => shareRoom(room._id)}>
+                                                            Share by UID
+                                                        </Button>
+                                                        <Button variant="outline" onClick={() => shareRoomByEmail(room._id)}>
+                                                            Share by Email
+                                                        </Button>
+                                                    </>
                                                 )}
                                             </div>
                                         </div>

@@ -8,6 +8,7 @@ from src.models.room import Room, CodeUpdate, ExecuteCode
 from src.services.websocket_manager import manager
 from src.services.code_executor import execute_python_code
 from src.core.firebase_auth import get_current_user
+from firebase_admin import auth as firebase_auth
 
 router = APIRouter()
 
@@ -128,4 +129,52 @@ async def share_room(room_id: str, data=Body(...), user=Depends(get_current_user
         {"_id": ObjectId(room_id)},
         {"$addToSet": {"shared_with": share_with_uid}}
     )
-    return {"message": "Room shared successfully"} 
+    return {"message": "Room shared successfully"}
+
+@router.post("/api/rooms/{room_id}/share-by-email")
+async def share_room_by_email(room_id: str, data=Body(...), user=Depends(get_current_user)):
+    """Share a room with another user by email. Only the owner can share."""
+    email = data.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Missing email")
+    try:
+        target_user = firebase_auth.get_user_by_email(email)
+    except firebase_auth.UserNotFoundError:
+        raise HTTPException(status_code=404, detail="User with this email not found")
+    share_with_uid = target_user.uid
+    room = await db.rooms.find_one({"_id": ObjectId(room_id)})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["owner"] != user["uid"]:
+        raise HTTPException(status_code=403, detail="Only the owner can share this room")
+    if share_with_uid == user["uid"]:
+        raise HTTPException(status_code=400, detail="Cannot share with yourself")
+    if share_with_uid in room.get("shared_with", []):
+        return {"message": "User already has access"}
+    await db.rooms.update_one(
+        {"_id": ObjectId(room_id)},
+        {"$addToSet": {"shared_with": share_with_uid}}
+    )
+    return {"message": f"Room shared with {email} successfully"}
+
+@router.get("/api/rooms/{room_id}/members")
+async def get_room_members(room_id: str, user=Depends(get_current_user)):
+    """Return a list of participants (owner and shared users) with their emails."""
+    room = await db.rooms.find_one({"_id": ObjectId(room_id)})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["owner"] != user["uid"] and user["uid"] not in room.get("shared_with", []):
+        raise HTTPException(status_code=403, detail="Not authorized to view members of this room")
+    uids = [room["owner"]] + room.get("shared_with", [])
+    members = []
+    for uid in uids:
+        try:
+            firebase_user = firebase_auth.get_user(uid)
+            members.append({
+                "uid": uid,
+                "email": firebase_user.email,
+                "display_name": firebase_user.display_name
+            })
+        except Exception:
+            members.append({"uid": uid, "email": None, "display_name": None})
+    return {"members": members} 

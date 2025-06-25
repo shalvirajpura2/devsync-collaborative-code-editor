@@ -14,6 +14,8 @@ export default function EditorPage() {
     const [room, setRoom] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [members, setMembers] = useState([]);
+    const [membersLoading, setMembersLoading] = useState(true);
 
     useEffect(() => {
         const fetchRoom = async () => {
@@ -27,8 +29,22 @@ export default function EditorPage() {
                 setLoading(false);
             }
         };
-
         fetchRoom();
+    }, [roomId]);
+
+    useEffect(() => {
+        const fetchMembers = async () => {
+            setMembersLoading(true);
+            try {
+                const response = await api.get(`/api/rooms/${roomId}/members`);
+                setMembers(response.data.members);
+            } catch (err) {
+                setMembers([]);
+            } finally {
+                setMembersLoading(false);
+            }
+        };
+        fetchMembers();
     }, [roomId]);
 
     const copyRoomId = () => {
@@ -71,6 +87,23 @@ export default function EditorPage() {
                         <Users className="h-4 w-4" />
                         <Badge variant="secondary">{room.users?.length || 0} users</Badge>
                     </div>
+                </div>
+                {/* Room members list */}
+                <div className="mt-4">
+                    <h2 className="text-base font-semibold mb-2">Participants:</h2>
+                    {membersLoading ? (
+                        <div>Loading members...</div>
+                    ) : (
+                        <div className="flex flex-wrap gap-4">
+                            {members.map((member) => (
+                                <div key={member.uid} className="flex items-center gap-2 bg-muted px-3 py-1 rounded">
+                                    <span className="font-medium">{member.display_name || member.email || member.uid}</span>
+                                    {member.email && <span className="text-xs text-muted-foreground">({member.email})</span>}
+                                    {room.owner === member.uid && <Badge variant="outline">Owner</Badge>}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </header>
             
