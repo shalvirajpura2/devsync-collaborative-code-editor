@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Plus, Users, Copy } from 'lucide-react';
 import AuthPanel from '@/components/AuthPanel';
+import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -16,6 +17,7 @@ export default function RoomSelectionPage() {
     const [joinRoomId, setJoinRoomId] = useState('');
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
+    const { user } = useFirebaseAuth();
 
     useEffect(() => {
         fetchRooms();
@@ -23,7 +25,7 @@ export default function RoomSelectionPage() {
 
     const fetchRooms = async () => {
         try {
-            const response = await axios.get(`${API_BASE_URL}/api/rooms`);
+            const response = await api.get(`/api/rooms`);
             setRooms(Array.isArray(response.data) ? response.data : []);
         } catch (error) {
             setRooms([]);
@@ -36,7 +38,7 @@ export default function RoomSelectionPage() {
         
         setLoading(true);
         try {
-            const response = await axios.post(`${API_BASE_URL}/api/rooms`, {
+            const response = await api.post(`/api/rooms`, {
                 name: newRoomName,
             });
             
@@ -57,6 +59,17 @@ export default function RoomSelectionPage() {
 
     const copyRoomId = (roomId) => {
         navigator.clipboard.writeText(roomId);
+    };
+
+    const shareRoom = async (roomId) => {
+        const shareWithUid = prompt('Enter the UID of the user to share with:');
+        if (!shareWithUid) return;
+        try {
+            const response = await api.post(`/api/rooms/${roomId}/share`, { share_with_uid: shareWithUid });
+            alert(response.data.message);
+        } catch (error) {
+            alert(error.response?.data?.detail || 'Failed to share room');
+        }
     };
 
     return (
@@ -137,6 +150,11 @@ export default function RoomSelectionPage() {
                                                     {room.users?.length || 0}
                                                 </div>
                                                 <Button onClick={() => joinRoom(room._id)}>Join Room</Button>
+                                                {user && room.owner === user.uid && (
+                                                    <Button variant="outline" onClick={() => shareRoom(room._id)}>
+                                                        Share
+                                                    </Button>
+                                                )}
                                             </div>
                                         </div>
                                     </CardContent>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '@/lib/axios';
 import CodeEditor from '@/components/CodeEditor';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +18,7 @@ export default function EditorPage() {
     useEffect(() => {
         const fetchRoom = async () => {
             try {
-                const response = await axios.get(`${API_BASE_URL}/api/rooms/${roomId}`);
+                const response = await api.get(`/api/rooms/${roomId}`);
                 setRoom(response.data);
             } catch (err) {
                 setError('Failed to fetch room data. It might not exist.');

@@ -5,9 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.j
 import { Badge } from '@/components/ui/badge.jsx'
 import { Separator } from '@/components/ui/separator.jsx'
 import { Play, Square, Terminal, Users } from 'lucide-react'
-import axios from 'axios'
+import api from '@/lib/axios'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || `ws://${window.location.host}`;
 
 function CodeEditor({ room }) {
@@ -91,7 +91,7 @@ function CodeEditor({ room }) {
     setOutput('Executing...')
     
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/rooms/${room._id}/execute`, {
+      const response = await api.post(`/api/rooms/${room._id}/execute`, {
         code: code
       })
       
