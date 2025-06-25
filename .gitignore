@@ -184,4 +184,10 @@ backend/app.db
 
 # OS
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Firebase Admin SDK credentials
+serviceAccountKey.json
+*.firebase-adminsdk-*.json
+backend/serviceAccountKey.json
+backend/src/core/serviceAccountKey.json 
