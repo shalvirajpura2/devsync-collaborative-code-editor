@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { Plus, Users, Copy } from 'lucide-react';
 import AuthPanel from '@/components/AuthPanel';
 import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
+import { Badge } from '@/components/ui/badge';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -18,12 +19,34 @@ export default function RoomSelectionPage() {
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
     const { user, loading: authLoading } = useFirebaseAuth();
+    const [tab, setTab] = useState('owned');
+    const [tabRooms, setTabRooms] = useState([]);
+    const [tabLoading, setTabLoading] = useState(false);
 
     useEffect(() => {
         if (user) {
             fetchRooms();
         }
     }, [user]);
+
+    useEffect(() => {
+        if (!user) return;
+        const fetchTabRooms = async () => {
+            setTabLoading(true);
+            try {
+                let url = '/api/rooms';
+                if (tab === 'owned') url += '?owned=true';
+                else if (tab === 'shared') url += '?shared=true';
+                const response = await api.get(url);
+                setTabRooms(Array.isArray(response.data) ? response.data : []);
+            } catch (error) {
+                setTabRooms([]);
+            } finally {
+                setTabLoading(false);
+            }
+        };
+        fetchTabRooms();
+    }, [user, tab]);
 
     const fetchRooms = async () => {
         try {
@@ -138,22 +161,46 @@ export default function RoomSelectionPage() {
 
                 <Separator className="my-8" />
 
+                <div className="mb-6 flex justify-center">
+                    <button
+                        className={`px-4 py-2 rounded-l border ${tab === 'owned' ? 'bg-primary text-white' : 'bg-card text-muted-foreground'}`}
+                        onClick={() => setTab('owned')}
+                    >
+                        My Rooms
+                    </button>
+                    <button
+                        className={`px-4 py-2 rounded-r border-l-0 border ${tab === 'shared' ? 'bg-primary text-white' : 'bg-card text-muted-foreground'}`}
+                        onClick={() => setTab('shared')}
+                    >
+                        Shared With Me
+                    </button>
+                </div>
+
                 <div>
-                    <h2 className="text-2xl font-semibold mb-4">Available Rooms</h2>
-                    {Array.isArray(rooms) && rooms.length === 0 ? (
+                    <h2 className="text-2xl font-semibold mb-4">
+                        {tab === 'owned' ? 'My Rooms' : 'Rooms Shared With Me'}
+                    </h2>
+                    {tabLoading ? (
+                        <div className="text-center py-8">Loading rooms...</div>
+                    ) : tabRooms.length === 0 ? (
                         <Card>
                             <CardContent className="text-center py-8">
-                                <p className="text-muted-foreground">No rooms available. Create one to get started!</p>
+                                <p className="text-muted-foreground">No rooms found.</p>
                             </CardContent>
                         </Card>
                     ) : (
                         <div className="grid gap-4">
-                            {(Array.isArray(rooms) ? rooms : []).map((room) => (
+                            {tabRooms.map((room) => (
                                 <Card key={room._id} className="hover:shadow-md transition-shadow">
                                     <CardContent className="p-4">
                                         <div className="flex items-center justify-between">
                                             <div>
-                                                <h3 className="font-semibold">{room.name}</h3>
+                                                <h3 className="font-semibold flex items-center gap-2">
+                                                    {room.name}
+                                                    {user && room.owner === user.uid && (
+                                                        <Badge variant="outline">Owner</Badge>
+                                                    )}
+                                                </h3>
                                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                                     <span>ID: {room._id}</span>
                                                     <Button variant="ghost" size="sm" onClick={() => copyRoomId(room._id)}>
@@ -164,7 +211,7 @@ export default function RoomSelectionPage() {
                                             <div className="flex items-center gap-4">
                                                 <div className="flex items-center gap-1 text-sm text-muted-foreground">
                                                     <Users className="h-4 w-4" />
-                                                    {room.users?.length || 0}
+                                                    {1 + (room.shared_with ? room.shared_with.length : 0)}
                                                 </div>
                                                 <Button onClick={() => joinRoom(room._id)}>Join Room</Button>
                                                 {user && room.owner === user.uid && (
