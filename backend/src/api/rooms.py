@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from bson import ObjectId
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Depends, Body
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Depends, Body, Query
 
 from src.db.mongodb import db
 from src.models.room import Room, CodeUpdate, ExecuteCode
@@ -41,15 +41,24 @@ async def get_room(room_id: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Invalid room ID")
 
 @router.get("/api/rooms")
-async def list_rooms(user=Depends(get_current_user)):
-    """List all rooms owned by or shared with the authenticated user."""
+async def list_rooms(
+    user=Depends(get_current_user),
+    owned: bool = Query(False),
+    shared: bool = Query(False)
+):
+    """List rooms owned by or shared with the authenticated user, or filter by type."""
     rooms = []
-    async for room in db.rooms.find({
-        "$or": [
+    query = None
+    if owned:
+        query = {"owner": user["uid"]}
+    elif shared:
+        query = {"shared_with": user["uid"]}
+    else:
+        query = {"$or": [
             {"owner": user["uid"]},
             {"shared_with": user["uid"]}
-        ]
-    }):
+        ]}
+    async for room in db.rooms.find(query):
         room["_id"] = str(room["_id"])
         rooms.append(room)
     return rooms
