@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Plus, Users, Copy } from 'lucide-react';
+import AuthPanel from '@/components/AuthPanel';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -61,6 +62,7 @@ export default function RoomSelectionPage() {
     return (
         <div className="min-h-screen bg-background p-6">
             <div className="max-w-4xl mx-auto">
+                <AuthPanel />
                 <header className="text-center mb-8">
                     <h1 className="text-4xl font-bold mb-2">Collaborative Code Editor</h1>
                     <p className="text-muted-foreground">
