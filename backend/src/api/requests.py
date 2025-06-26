@@ -2,10 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from bson import ObjectId, errors as bson_errors
 from typing import List
 from datetime import datetime, timezone
+import json
 
 from src.db.mongodb import db
 from src.core.firebase_auth import get_current_user
 from src.models.room import JoinRequest
+from src.services.websocket_manager import manager
 
 router = APIRouter()
 
@@ -43,7 +45,22 @@ async def request_to_join_room(room_id: str, user=Depends(get_current_user)):
         owner_uid=owner_uid
     )
 
-    await db.join_requests.insert_one(new_request.model_dump())
+    result = await db.join_requests.insert_one(new_request.model_dump())
+    request_id = str(result.inserted_id)
+    # Send real-time notification to owner with request_id
+    await manager.send_notification_to_user(
+        owner_uid,
+        json.dumps({
+            "type": "notification",
+            "subtype": "join_request",
+            "room_id": room_id,
+            "room_name": room["name"],
+            "requester_email": user["email"],
+            "requester_uid": requester_uid,
+            "request_id": request_id,
+            "message": f"{user['email']} requested to join '{room['name']}'"
+        })
+    )
     return {"message": "Your request to join has been sent to the room owner."}
 
 
@@ -96,6 +113,19 @@ async def approve_join_request(request_id: str, user=Depends(get_current_user)):
         {"_id": req_obj_id},
         {"$set": {"status": "approved"}}
     )
+
+    # Send real-time notification to requester
+    room = await db.rooms.find_one({"_id": ObjectId(request["room_id"])} )
+    await manager.send_notification_to_user(
+        request["requester_uid"],
+        json.dumps({
+            "type": "notification",
+            "subtype": "join_request_approved",
+            "room_id": request["room_id"],
+            "room_name": room["name"] if room else "",
+            "message": f"Your request to join '{room['name'] if room else ''}' was approved."
+        })
+    )
     return {"message": "Request approved. User has been added to the room."}
 
 
@@ -118,6 +148,19 @@ async def deny_join_request(request_id: str, user=Depends(get_current_user)):
     await db.join_requests.update_one(
         {"_id": req_obj_id},
         {"$set": {"status": "denied"}}
+    )
+
+    # Send real-time notification to requester
+    room = await db.rooms.find_one({"_id": ObjectId(request["room_id"])} )
+    await manager.send_notification_to_user(
+        request["requester_uid"],
+        json.dumps({
+            "type": "notification",
+            "subtype": "join_request_denied",
+            "room_id": request["room_id"],
+            "room_name": room["name"] if room else "",
+            "message": f"Your request to join '{room['name'] if room else ''}' was denied."
+        })
     )
     return {"message": "Request denied."}
 
