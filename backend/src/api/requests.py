@@ -1,13 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from bson import ObjectId, errors as bson_errors
 from typing import List
 from datetime import datetime, timezone
 import json
+import logging
 
-from src.db.mongodb import db
+from src.db.mongodb import db, get_feedback_collection, append_feedback_to_gsheet
 from src.core.firebase_auth import get_current_user
 from src.models.room import JoinRequest
 from src.services.websocket_manager import manager
+from pydantic import BaseModel, EmailStr, Field
 
 router = APIRouter()
 
@@ -180,4 +182,22 @@ async def get_my_requests(user=Depends(get_current_user)):
             "status": req["status"],
             "created_at": req["created_at"]
         })
-    return my_requests 
+    return my_requests
+
+class FeedbackIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    org: str = Field(..., min_length=1, max_length=100)
+    message: str = Field(..., min_length=1, max_length=1000)
+    social: str | None = Field(None, max_length=200)
+
+@router.post("/api/feedback")
+async def submit_feedback(feedback: FeedbackIn = Body(...)):
+    collection = get_feedback_collection()
+    doc = feedback.dict()
+    await collection.insert_one(doc)
+    # Also append to Google Sheets
+    try:
+        append_feedback_to_gsheet(doc)
+    except Exception as e:
+        logging.exception("Failed to append feedback to Google Sheets")
+    return {"message": "Feedback submitted successfully."} 

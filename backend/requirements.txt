@@ -20,3 +20,5 @@ starlette==0.37.2
 typing-extensions==4.11.0
 uvicorn==0.29.0
 Werkzeug==3.0.2
+gspread
+google-auth
