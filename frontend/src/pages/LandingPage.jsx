@@ -1,7 +1,8 @@
 import { Button } from '@/components/ui/button';
 import { Code, Users, Share2, PlayCircle, Github, Linkedin, Mail, Terminal, Quote } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
 
 const features = [
   {
@@ -42,6 +43,7 @@ const testimonials = [
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const { user } = useFirebaseAuth();
   const [testimonialIdx, setTestimonialIdx] = useState(0);
 
   // Simple auto-advance for testimonials
@@ -53,6 +55,14 @@ export default function LandingPage() {
     }, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleGetStarted = () => {
+    if (user) {
+      navigate('/app');
+    } else {
+      navigate('/auth');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#18181b] via-[#23272f] to-[#1e293b] text-zinc-100 flex flex-col font-sans">
@@ -72,7 +82,7 @@ export default function LandingPage() {
           <p className="text-2xl md:text-3xl mb-8 text-zinc-300 max-w-xl">
             Collaborate. Code. Run — <span className="text-indigo-300 font-bold">Together in Real-Time.</span>
           </p>
-          <Button size="lg" className="text-lg px-8 py-4 font-semibold shadow-lg" onClick={() => navigate('/auth')}>
+          <Button size="lg" className="text-lg px-8 py-4 font-semibold shadow-lg" onClick={handleGetStarted}>
             Get Started
           </Button>
         </div>

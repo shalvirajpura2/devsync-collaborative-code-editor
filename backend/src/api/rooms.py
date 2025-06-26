@@ -1,10 +1,14 @@
 import json
-from datetime import datetime
-from bson import ObjectId
+from datetime import datetime, timezone
+from bson import ObjectId, errors as bson_errors
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Depends, Body, Query
+import pymongo
 
 from src.db.mongodb import db
-from src.models.room import Room, CodeUpdate, ExecuteCode
+from src.models.room import (
+    RoomCreate, RoomUpdate, CodeUpdate, ExecuteCode, 
+    ShareRequest, ShareByEmailRequest
+)
 from src.services.websocket_manager import manager
 from src.services.code_executor import execute_python_code
 from src.core.firebase_auth import get_current_user
@@ -12,33 +16,81 @@ from firebase_admin import auth as firebase_auth
 
 router = APIRouter()
 
-@router.post("/api/rooms")
-async def create_room(room: Room, user=Depends(get_current_user)):
+@router.post("/api/rooms", status_code=201)
+async def create_room(room_create: RoomCreate, user=Depends(get_current_user)):
     """Create a new room, owned by the authenticated user."""
+    now = datetime.now(timezone.utc)
     room_data = {
-        "name": room.name,
-        "code": room.code,
-        "created_at": datetime.utcnow(),
+        "name": room_create.name,
+        "code": "# Welcome to the collaborative Python editor!\\nprint('Hello, World!')",
+        "language": "python",
+        "created_at": now,
+        "last_activity": now,
         "owner": user["uid"],
         "shared_with": [],
-        "users": []
     }
     result = await db.rooms.insert_one(room_data)
     return {"room_id": str(result.inserted_id), "message": "Room created successfully"}
+
+@router.delete("/api/rooms/{room_id}", status_code=204)
+async def delete_room(room_id: str, user=Depends(get_current_user)):
+    """Delete a room. Only the owner can delete."""
+    try:
+        obj_id = ObjectId(room_id)
+    except bson_errors.InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid Room ID format.")
+        
+    room = await db.rooms.find_one({"_id": obj_id})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["owner"] != user["uid"]:
+        raise HTTPException(status_code=403, detail="Only the owner can delete this room")
+    
+    await db.rooms.delete_one({"_id": obj_id})
+    return
+
+
+@router.put("/api/rooms/{room_id}")
+async def rename_room(room_id: str, room_update: RoomUpdate, user=Depends(get_current_user)):
+    """Rename a room. Only the owner can rename."""
+    try:
+        obj_id = ObjectId(room_id)
+    except bson_errors.InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid Room ID format.")
+
+    room = await db.rooms.find_one({"_id": obj_id})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["owner"] != user["uid"]:
+        raise HTTPException(status_code=403, detail="Only the owner can rename this room")
+    
+    update_data = room_update.model_dump(exclude_unset=True)
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No update data provided")
+
+    result = await db.rooms.update_one(
+        {"_id": obj_id},
+        {"$set": update_data}
+    )
+    if result.modified_count == 1:
+        return {"message": "Room renamed successfully"}
+    raise HTTPException(status_code=400, detail="Could not rename room")
 
 @router.get("/api/rooms/{room_id}")
 async def get_room(room_id: str, user=Depends(get_current_user)):
     """Get room details if the user is the owner or shared_with."""
     try:
-        room = await db.rooms.find_one({"_id": ObjectId(room_id)})
-        if not room:
-            raise HTTPException(status_code=404, detail="Room not found")
-        if room["owner"] != user["uid"] and user["uid"] not in room.get("shared_with", []):
-            raise HTTPException(status_code=403, detail="Not authorized to access this room")
-        room["_id"] = str(room["_id"])
-        return room
-    except Exception as e:
-        raise HTTPException(status_code=400, detail="Invalid room ID")
+        obj_id = ObjectId(room_id)
+    except bson_errors.InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid Room ID format.")
+
+    room = await db.rooms.find_one({"_id": obj_id})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["owner"] != user["uid"] and user["uid"] not in room.get("shared_with", []):
+        raise HTTPException(status_code=403, detail="Not authorized to access this room")
+    room["_id"] = str(room["_id"])
+    return room
 
 @router.get("/api/rooms")
 async def list_rooms(
@@ -47,7 +99,6 @@ async def list_rooms(
     shared: bool = Query(False)
 ):
     """List rooms owned by or shared with the authenticated user, or filter by type."""
-    rooms = []
     query = None
     if owned:
         query = {"owner": user["uid"]}
@@ -58,7 +109,10 @@ async def list_rooms(
             {"owner": user["uid"]},
             {"shared_with": user["uid"]}
         ]}
-    async for room in db.rooms.find(query):
+    
+    rooms_cursor = db.rooms.find(query).sort("created_at", pymongo.DESCENDING)
+    rooms = []
+    async for room in rooms_cursor:
         room["_id"] = str(room["_id"])
         rooms.append(room)
     return rooms
@@ -74,7 +128,10 @@ async def update_code(room_id: str, code_update: CodeUpdate, user=Depends(get_cu
             raise HTTPException(status_code=403, detail="Not authorized to update this room")
         result = await db.rooms.update_one(
             {"_id": ObjectId(room_id)},
-            {"$set": {"code": code_update.code}}
+            {"$set": {
+                "code": code_update.code,
+                "last_activity": datetime.now(timezone.utc)
+            }}
         )
         await manager.broadcast_to_room(
             json.dumps({"type": "code_update", "code": code_update.code}),
@@ -94,6 +151,10 @@ async def execute_code_in_room(room_id: str, execute_request: ExecuteCode, user=
         if room["owner"] != user["uid"] and user["uid"] not in room.get("shared_with", []):
             return {"stdout": "", "stderr": "Not authorized to execute code in this room", "returncode": 1}
         output = await execute_python_code(execute_request.code)
+        await db.rooms.update_one(
+            {"_id": ObjectId(room_id)},
+            {"$set": {"last_activity": datetime.now(timezone.utc)}}
+        )
         await manager.broadcast_to_room(
             json.dumps({"type": "execution_result", "output": output}),
             room_id
@@ -113,18 +174,19 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
             if message["type"] == "code_update":
                 await db.rooms.update_one(
                     {"_id": ObjectId(room_id)},
-                    {"$set": {"code": message["code"]}}
+                    {"$set": {
+                        "code": message["code"],
+                        "last_activity": datetime.now(timezone.utc)
+                    }}
                 )
                 await manager.broadcast_to_room(data, room_id, websocket)
     except WebSocketDisconnect:
         manager.disconnect(websocket, room_id)
 
 @router.post("/api/rooms/{room_id}/share")
-async def share_room(room_id: str, data=Body(...), user=Depends(get_current_user)):
+async def share_room(room_id: str, share_request: ShareRequest, user=Depends(get_current_user)):
     """Share a room with another user by UID. Only the owner can share."""
-    share_with_uid = data.get("share_with_uid")
-    if not share_with_uid:
-        raise HTTPException(status_code=400, detail="Missing share_with_uid")
+    share_with_uid = share_request.share_with_uid
     room = await db.rooms.find_one({"_id": ObjectId(room_id)})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
@@ -141,9 +203,9 @@ async def share_room(room_id: str, data=Body(...), user=Depends(get_current_user
     return {"message": "Room shared successfully"}
 
 @router.post("/api/rooms/{room_id}/share-by-email")
-async def share_room_by_email(room_id: str, data=Body(...), user=Depends(get_current_user)):
+async def share_room_by_email(room_id: str, request: ShareByEmailRequest, user=Depends(get_current_user)):
     """Share a room with another user by email. Only the owner can share."""
-    email = data.get("email")
+    email = request.email
     if not email:
         raise HTTPException(status_code=400, detail="Missing email")
     try:
