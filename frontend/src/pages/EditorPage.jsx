@@ -127,8 +127,52 @@ export default function EditorPage() {
                         ← Back to Rooms
                     </Button>
                     <div className="flex flex-col min-w-0">
-                        <span className="text-lg md:text-2xl font-bold truncate text-zinc-100">{room?.name}</span>
-                        <span className="text-xs md:text-sm text-zinc-400 truncate">Room ID: {room?._id}</span>
+                        <span className="text-lg md:text-2xl font-bold truncate text-zinc-100 flex items-center gap-3">
+                            {room?.name}
+                            {/* Share Button */}
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button size="sm" variant="outline" className="ml-2">Share</Button>
+                                </PopoverTrigger>
+                                <PopoverContent align="start" className="w-64 bg-zinc-900 border-zinc-800 p-4 rounded-xl shadow-2xl mt-2 z-50">
+                                    <div className="mb-2 font-semibold text-zinc-200">Share Room</div>
+                                    <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        className="w-full mb-2 flex items-center gap-2"
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(roomId);
+                                            toast.success('Room ID copied!');
+                                        }}
+                                    >
+                                        <Copy className="h-4 w-4" /> Copy Room ID
+                                    </Button>
+                                    <form
+                                        onSubmit={async (e) => {
+                                            e.preventDefault();
+                                            const email = e.target.email.value;
+                                            if (!email) return;
+                                            try {
+                                                await api.post(`/api/rooms/${roomId}/share-by-email`, { email });
+                                                toast.success('Room shared via email!');
+                                            } catch {
+                                                toast.error('Failed to share room.');
+                                            }
+                                        }}
+                                    >
+                                        <input
+                                            name="email"
+                                            type="email"
+                                            placeholder="Share via email"
+                                            className="w-full rounded bg-zinc-800 border border-zinc-700 text-zinc-100 p-2 mb-2"
+                                            required
+                                        />
+                                        <Button size="sm" variant="outline" className="w-full" type="submit">Share via Email</Button>
+                                    </form>
+                                </PopoverContent>
+                            </Popover>
+                        </span>
+                        {/* <span className="text-xs md:text-sm text-zinc-400 truncate">Room ID: {room?._id}</span> */}
                     </div>
                 </div>
                 {/* Right: Participants, avatar, bell */}
@@ -199,9 +243,8 @@ export default function EditorPage() {
                 
                 </div>
             </header>
-            {/* Main content area (code editor, etc.) */}
-            <div className="flex-1 overflow-auto">
-                {/* Remove any duplicate header here, just render the editor */}
+            {/* Main Editor Area - full width */}
+            <div className="flex-1 flex flex-col min-h-0">
                 <CodeEditor room={room} />
             </div>
             {/* Remove User Confirmation Modal */}

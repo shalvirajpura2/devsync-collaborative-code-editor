@@ -45,9 +45,7 @@ function App() {
             authLoading ? (
               <LoadingSpinner />
             ) : user ? (
-              <DashboardLayout key={user.uid}>
-                <EditorPage key={user.uid} />
-              </DashboardLayout>
+              <EditorPage key={user.uid} />
             ) : (
               <Navigate to="/" />
             )
@@ -59,9 +57,7 @@ function App() {
             authLoading ? (
               <LoadingSpinner />
             ) : user ? (
-              <DashboardLayout key={user.uid}>
-                <SettingsPage key={user.uid} />
-              </DashboardLayout>
+              <SettingsPage key={user.uid} />
             ) : (
               <Navigate to="/" />
             )

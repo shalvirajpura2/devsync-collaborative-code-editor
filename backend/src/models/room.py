@@ -22,6 +22,7 @@ class CodeUpdate(BaseModel):
 
 class ExecuteCode(BaseModel):
     code: str
+    inputs: Optional[List[str]] = None
 
 class ShareRequest(BaseModel):
     share_with_uid: str

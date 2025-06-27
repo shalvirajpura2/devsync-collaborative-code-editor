@@ -10,7 +10,7 @@ from src.models.room import (
     ShareRequest, ShareByEmailRequest
 )
 from src.services.websocket_manager import manager
-from src.services.code_executor import execute_python_code
+from src.services.code_executor import execute_python_code, execute_python_code_multiple
 from src.core.firebase_auth import get_current_user
 from firebase_admin import auth as firebase_auth
 
@@ -143,13 +143,26 @@ async def update_code(room_id: str, code_update: CodeUpdate, user=Depends(get_cu
 
 @router.post("/api/rooms/{room_id}/execute")
 async def execute_code_in_room(room_id: str, execute_request: ExecuteCode, user=Depends(get_current_user)):
-    """Execute Python code and broadcast the result if the user is authorized."""
+    """Execute Python code for one or more test cases and broadcast the result if the user is authorized."""
     try:
         room = await db.rooms.find_one({"_id": ObjectId(room_id)})
         if not room:
             return {"stdout": "", "stderr": "Room not found", "returncode": 1}
         if room["owner"] != user["uid"] and user["uid"] not in room.get("shared_with", []):
             return {"stdout": "", "stderr": "Not authorized to execute code in this room", "returncode": 1}
+        # If multiple test case inputs are provided
+        if execute_request.inputs:
+            outputs = await execute_python_code_multiple(execute_request.code, execute_request.inputs)
+            await db.rooms.update_one(
+                {"_id": ObjectId(room_id)},
+                {"$set": {"last_activity": datetime.now(timezone.utc)}}
+            )
+            await manager.broadcast_to_room(
+                json.dumps({"type": "execution_result", "output": outputs}),
+                room_id
+            )
+            return outputs
+        # Single run as before
         output = await execute_python_code(execute_request.code)
         await db.rooms.update_one(
             {"_id": ObjectId(room_id)},
@@ -179,6 +192,8 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
                         "last_activity": datetime.now(timezone.utc)
                     }}
                 )
+                await manager.broadcast_to_room(data, room_id, websocket)
+            elif message["type"] in ("cp_mode_update", "cp_testcases_update"):
                 await manager.broadcast_to_room(data, room_id, websocket)
     except WebSocketDisconnect:
         manager.disconnect(websocket, room_id)
