@@ -4,11 +4,22 @@ import api from '@/lib/axios';
 import CodeEditor from '@/components/CodeEditor';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Users, Copy, Bell } from 'lucide-react';
+import { Users, Copy, Bell, X } from 'lucide-react';
 import { toast } from "sonner";
 import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -21,6 +32,8 @@ export default function EditorPage() {
     const [error, setError] = useState(null);
     const [members, setMembers] = useState([]);
     const [membersLoading, setMembersLoading] = useState(true);
+    const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
+    const [pendingRemoveUid, setPendingRemoveUid] = useState(null);
 
     useEffect(() => {
         const fetchRoom = async () => {
@@ -71,6 +84,23 @@ export default function EditorPage() {
 
     const copyRoomId = () => {
         navigator.clipboard.writeText(roomId);
+    };
+
+    // Add remove access handler
+    const handleRemoveAccess = async () => {
+        if (!pendingRemoveUid) return;
+        try {
+            await api.post(`/api/rooms/${roomId}/remove-user`, { uid: pendingRemoveUid });
+            toast.success('User access removed.');
+            // Refresh members list
+            const response = await api.get(`/api/rooms/${roomId}/members`);
+            setMembers(response.data.members);
+        } catch (err) {
+            toast.error('Failed to remove user.');
+        } finally {
+            setRemoveDialogOpen(false);
+            setPendingRemoveUid(null);
+        }
     };
 
     if (loading) {
@@ -147,6 +177,19 @@ export default function EditorPage() {
                                             {room.owner === member.uid && (
                                                 <Badge variant="outline" className="ml-2 text-xs px-2 py-0.5 border-indigo-400 text-indigo-300">Owner</Badge>
                                             )}
+                                            {/* Remove button for owner, not for self */}
+                                            {user?.uid === room.owner && member.uid !== room.owner && (
+                                                <button
+                                                    className="ml-auto text-red-400 hover:text-red-600 p-1 rounded transition"
+                                                    title="Remove access"
+                                                    onClick={() => {
+                                                        setPendingRemoveUid(member.uid);
+                                                        setRemoveDialogOpen(true);
+                                                    }}
+                                                >
+                                                    <X className="w-4 h-4" />
+                                                </button>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
@@ -161,6 +204,21 @@ export default function EditorPage() {
                 {/* Remove any duplicate header here, just render the editor */}
                 <CodeEditor room={room} />
             </div>
+            {/* Remove User Confirmation Modal */}
+            <AlertDialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Remove User</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Are you sure you want to remove this user from the room?
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setRemoveDialogOpen(false)}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleRemoveAccess} className="bg-red-600 hover:bg-red-700">Remove</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 } 

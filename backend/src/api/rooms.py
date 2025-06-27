@@ -272,4 +272,38 @@ async def get_room_members(room_id: str, user=Depends(get_current_user)):
             })
         except Exception:
             members.append({"uid": uid, "email": None, "display_name": None})
-    return {"members": members} 
+    return {"members": members}
+
+@router.post("/api/rooms/{room_id}/remove-user")
+async def remove_user_from_room(room_id: str, payload: dict = Body(...), user=Depends(get_current_user)):
+    """Remove a user's access from a room. Only the owner can remove."""
+    remove_uid = payload.get("uid")
+    if not remove_uid:
+        raise HTTPException(status_code=400, detail="Missing user UID to remove.")
+    try:
+        obj_id = ObjectId(room_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid Room ID format.")
+    room = await db.rooms.find_one({"_id": obj_id})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["owner"] != user["uid"]:
+        raise HTTPException(status_code=403, detail="Only the owner can remove users from this room")
+    if remove_uid not in room.get("shared_with", []):
+        raise HTTPException(status_code=400, detail="User does not have access to this room")
+    await db.rooms.update_one(
+        {"_id": obj_id},
+        {"$pull": {"shared_with": remove_uid}}
+    )
+    # Send real-time notification to the removed user
+    await manager.send_notification_to_user(
+        remove_uid,
+        json.dumps({
+            "type": "notification",
+            "subtype": "removed_from_room",
+            "room_id": room_id,
+            "room_name": room["name"],
+            "message": f"You have been removed from the room '{room['name']}' by the owner."
+        })
+    )
+    return {"message": "User access removed from the room."} 

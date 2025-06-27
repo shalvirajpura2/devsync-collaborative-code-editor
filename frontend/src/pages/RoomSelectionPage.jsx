@@ -439,10 +439,10 @@ export default function RoomSelectionPage() {
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Join Room</DialogTitle>
-                        <DialogDescription>
+                        {/* <DialogDescription> */}
                             {/* This description is for accessibility and screen readers */}
-                            {joinDialogMessage}
-                        </DialogDescription>
+                            {/* {joinDialogMessage} */}
+                        {/* </DialogDescription> */}
                     </DialogHeader>
                     <div className="my-4 text-zinc-200">{joinDialogMessage}</div>
                     <DialogFooter>
