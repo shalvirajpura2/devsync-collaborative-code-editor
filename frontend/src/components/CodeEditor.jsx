@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Editor } from '@monaco-editor/react'
 import { Button } from '@/components/ui/button.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
-import { Play, Copy, Users, Check, Terminal, Download, Upload, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react'
+import { Play, Copy, Users, Check, Terminal, Download, Upload, ChevronLeft, ChevronRight, Plus, X, MessageCircle } from 'lucide-react'
 import api from '@/lib/axios'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useFirebaseAuth } from '@/hooks/useFirebaseAuth'
@@ -51,6 +51,12 @@ function CodeEditor({ room }) {
   const testCasesContainerRef = useRef(null);
   const fileInputRef = useRef(null);
   const [simpleInput, setSimpleInput] = useState('');
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [unreadChat, setUnreadChat] = useState(false);
+  const chatEndRef = useRef(null);
+  const isOwner = user?.uid === room.owner;
 
   useEffect(() => {
     retryCountRef.current = 0
@@ -111,6 +117,15 @@ function CodeEditor({ room }) {
             }
             return prev;
           });
+        } else if (message.type === 'chat_history') {
+          setChatMessages(message.messages || []);
+        } else if (message.type === 'chat_message') {
+          setChatMessages(prev => {
+            // Prevent duplicate if already present (by timestamp+user+text)
+            if (prev.some(m => m.timestamp === message.timestamp && m.user === message.user && m.text === message.text)) return prev;
+            return [...prev, message];
+          });
+          if (!chatOpen) setUnreadChat(true);
         }
       }
       ws.onclose = () => {
@@ -379,6 +394,36 @@ function CodeEditor({ room }) {
     reader.readAsText(file);
   };
 
+  // Scroll chat to bottom when opened or new message
+  useEffect(() => {
+    if (chatOpen && chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      setUnreadChat(false);
+    }
+  }, [chatOpen, chatMessages]);
+
+  const sendChatMessage = () => {
+    if (!chatInput.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    const msg = {
+      type: 'chat_message',
+      user: user?.email || 'Anonymous',
+      text: chatInput,
+      timestamp: new Date().toISOString(),
+    };
+    wsRef.current.send(JSON.stringify(msg));
+    setChatInput('');
+  };
+
+  const handleClearChat = async () => {
+    try {
+      await api.post(`/api/rooms/${room._id}/chat/clear`);
+      setChatMessages([]);
+      toast.success('Chat history cleared!');
+    } catch (e) {
+      toast.error('Failed to clear chat history.');
+    }
+  };
+
   return (
     <div className="flex flex-col h-[90vh] w-full max-w-screen-2xl mx-auto">
       {/* CP Mode Warning Banner */}
@@ -389,7 +434,6 @@ function CodeEditor({ room }) {
        </svg>
        CP Mode is active. All code, test cases, and results are visible to all room members. Please use this mode responsibly.
      </div>
-     
       )}
       <div className="rounded-2xl shadow-xl bg-zinc-900/95 border border-zinc-800 overflow-hidden flex flex-col h-full">
         {/* Header Bar */}
@@ -406,6 +450,72 @@ function CodeEditor({ room }) {
             </div>
             {/* Action Buttons */}
             <div className="flex items-center gap-2">
+              {/* Chat Button */}
+              <Dialog open={chatOpen} onOpenChange={setChatOpen}>
+                <Tooltip content="Chat">
+                  <DialogTrigger asChild>
+                    <Button size="sm" variant="secondary" className="flex items-center gap-2 relative">
+                      <MessageCircle className="h-5 w-5" /> Chat
+                      {unreadChat && <span className="absolute -top-1 -right-1 bg-red-500 rounded-full w-3 h-3" />}
+                    </Button>
+                  </DialogTrigger>
+                </Tooltip>
+                <DialogContent className="max-w-lg w-full">
+                  <DialogHeader>
+                    <DialogTitle>Room Chat</DialogTitle>
+                  </DialogHeader>
+                  <div className="flex flex-col gap-2 max-h-96 min-h-[300px] overflow-y-auto p-2 bg-zinc-900 border border-zinc-800 rounded">
+                    {chatMessages.length === 0 && <div className="text-zinc-400 text-sm text-center">No messages yet.</div>}
+                    {chatMessages.map((msg, idx) => {
+                      const isMe = user?.email === msg.user;
+                      const isOwnerMsg = msg.user && room.owner_email && msg.user === room.owner_email;
+                      return (
+                        <div
+                          key={idx}
+                          className={`flex mb-1 ${isMe ? 'justify-end' : 'justify-start'}`}
+                        >
+                          {!isMe && (
+                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-200 mr-2">
+                              {msg.user?.[0]?.toUpperCase() || '?'}
+                            </div>
+                          )}
+                          <div className={`flex flex-col max-w-[70%] ${isMe ? 'items-end' : 'items-start'}`}>
+                            <div className={`rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${isMe ? 'bg-blue-600 text-white' : isOwnerMsg ? 'bg-green-700/80 text-white' : 'bg-zinc-800 text-zinc-100'} shadow-sm`}>
+                              {msg.text}
+                            </div>
+                            <div className="flex items-center gap-1 mt-1">
+                              <span className="text-xs text-zinc-400">{msg.user}{isOwnerMsg && <span className="ml-1 text-green-400 font-bold">(Owner)</span>}</span>
+                              <span className="text-[10px] text-zinc-500 ml-2">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                          </div>
+                          {isMe && (
+                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-700 flex items-center justify-center text-xs font-bold text-white ml-2">
+                              {msg.user?.[0]?.toUpperCase() || '?'}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    <div ref={chatEndRef} />
+                  </div>
+                  <div className="flex gap-2 mt-2 items-center">
+                    <input
+                      className="flex-1 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      value={chatInput}
+                      onChange={e => setChatInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') sendChatMessage(); }}
+                      placeholder={user ? "Type a message..." : "Login to chat"}
+                      disabled={!user}
+                    />
+                    <Button onClick={sendChatMessage} disabled={!chatInput.trim() || !user} variant="primary">Send</Button>
+                    {isOwner && (
+                      <Button onClick={handleClearChat} variant="destructive">Clear Chat</Button>
+                    )}
+                  </div>
+                  {!user && <div className="text-xs text-zinc-400 mt-2 text-center">You must be logged in to send messages.</div>}
+                </DialogContent>
+              </Dialog>
+              {/* Existing Buttons */}
               <Tooltip content="Run (Ctrl+Enter)"><Button size="sm" variant="primary" onClick={executeCode} disabled={isExecuting || !code.trim()} className="flex items-center gap-2"><Play className="h-5 w-5" /> Run</Button></Tooltip>
               <Tooltip content="Copy Code"><Button size="sm" variant="secondary" onClick={handleCopy} className="flex items-center gap-2">{copied ? <Check className="h-5 w-5 text-green-400" /> : <Copy className="h-5 w-5" />} {copied ? 'Copied!' : 'Copy'}</Button></Tooltip>
             </div>

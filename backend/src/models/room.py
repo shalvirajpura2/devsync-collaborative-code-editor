@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Any
 
 class Room(BaseModel):
     name: str
@@ -39,4 +39,9 @@ class JoinRequest(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class JoinRequestInDB(JoinRequest):
-    id: str = Field(alias="_id") 
+    id: str = Field(alias="_id")
+
+class ChatMessage(BaseModel):
+    user: str
+    text: str
+    timestamp: str 

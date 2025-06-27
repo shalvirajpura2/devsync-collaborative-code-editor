@@ -191,8 +191,11 @@ async def execute_code_in_room(room_id: str, execute_request: ExecuteCode, user=
 
 @router.websocket("/ws/{room_id}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str):
-    # WebSocket authentication is not implemented here, but can be added for extra security
     await manager.connect(websocket, room_id)
+    # On connect, send chat history
+    doc = await db.chat_messages.find_one({"room_id": room_id})
+    history = doc["messages"] if doc and "messages" in doc else []
+    await websocket.send_text(json.dumps({"type": "chat_history", "messages": history}))
     try:
         while True:
             data = await websocket.receive_text()
@@ -208,6 +211,15 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
                 await manager.broadcast_to_room(data, room_id, websocket)
             elif message["type"] in ("cp_mode_update", "cp_testcases_update"):
                 await manager.broadcast_to_room(data, room_id, websocket)
+            elif message["type"] == "chat_message":
+                # Store message in DB
+                await db.chat_messages.update_one(
+                    {"room_id": room_id},
+                    {"$push": {"messages": message}},
+                    upsert=True
+                )
+                await manager.broadcast_to_room(data, room_id)
+                await websocket.send_text(data)
     except WebSocketDisconnect:
         manager.disconnect(websocket, room_id)
 
@@ -334,4 +346,24 @@ async def remove_user_from_room(room_id: str, payload: dict = Body(...), user=De
             "message": f"You have been removed from the room '{room['name']}' by the owner."
         })
     )
-    return {"message": "User access removed from the room."} 
+    return {"message": "User access removed from the room."}
+
+@router.get("/api/rooms/{room_id}/chat")
+async def get_chat_history(room_id: str, user=Depends(get_current_user)):
+    room = await db.rooms.find_one({"_id": ObjectId(room_id)})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["owner"] != user["uid"] and user["uid"] not in room.get("shared_with", []):
+        raise HTTPException(status_code=403, detail="Not authorized to view chat history")
+    doc = await db.chat_messages.find_one({"room_id": room_id})
+    return doc["messages"] if doc and "messages" in doc else []
+
+@router.post("/api/rooms/{room_id}/chat/clear")
+async def clear_chat_history(room_id: str, user=Depends(get_current_user)):
+    room = await db.rooms.find_one({"_id": ObjectId(room_id)})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["owner"] != user["uid"]:
+        raise HTTPException(status_code=403, detail="Only the owner can clear chat history")
+    await db.chat_messages.update_one({"room_id": room_id}, {"$set": {"messages": []}}, upsert=True)
+    return {"message": "Chat history cleared"} 
