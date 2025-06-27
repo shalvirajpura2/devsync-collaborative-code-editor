@@ -117,13 +117,7 @@ export default function AuthPage() {
             {resendLoading ? 'Sending...' : verificationSent ? 'Verification Sent' : 'Resend Verification Email'}
           </Button>
           {resendError && <div className="text-red-400 text-sm text-center mb-2">{resendError}</div>}
-          <div className="mt-8 flex flex-col items-center gap-2 text-zinc-400 text-xs">
-            <div className="flex gap-2">
-              <a href="https://github.com/shalvirajpura" target="_blank" rel="noopener noreferrer" className="hover:text-indigo-400 transition-colors"><Github className="w-5 h-5" /></a>
-              <a href="mailto:shalvirajpura@gmail.com" className="hover:text-pink-400 transition-colors"><Mail className="w-5 h-5" /></a>
-            </div>
-            <span>Built by Shalvi Rajpura</span>
-          </div>
+        
         </div>
       </div>
     );

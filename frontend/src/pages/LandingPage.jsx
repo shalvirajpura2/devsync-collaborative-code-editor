@@ -289,6 +289,7 @@ export default function LandingPage() {
           <span className="text-lg text-zinc-300 text-center mb-2">
             I created DevSync because coding together should be as easy as sharing a link. After struggling to collaborate on code with friends and teammates, I wanted something instant, beautiful, and truly real-time—so I made it. Whether you're building with friends, teaching, or hacking on a project, DevSync lets you collaborate in real time—no installs, no waiting, just code and create together.<br/><br/>
             <span className="italic">— Shalvi Rajpura</span>
+            
           </span>
          
         </div>
