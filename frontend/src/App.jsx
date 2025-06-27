@@ -8,6 +8,7 @@ import LandingPage from "./pages/LandingPage";
 import RoomSelectionPage from "./pages/RoomSelectionPage";
 import EditorPage from "./pages/EditorPage";
 import AuthPage from "./pages/AuthPage";
+import SettingsPage from "./pages/SettingsPage";
 import './App.css';
 import { Toaster } from "@/components/ui/sonner";
 import DashboardLayout from './components/DashboardLayout';
@@ -46,6 +47,20 @@ function App() {
             ) : user ? (
               <DashboardLayout key={user.uid}>
                 <EditorPage key={user.uid} />
+              </DashboardLayout>
+            ) : (
+              <Navigate to="/" />
+            )
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            authLoading ? (
+              <LoadingSpinner />
+            ) : user ? (
+              <DashboardLayout key={user.uid}>
+                <SettingsPage key={user.uid} />
               </DashboardLayout>
             ) : (
               <Navigate to="/" />
