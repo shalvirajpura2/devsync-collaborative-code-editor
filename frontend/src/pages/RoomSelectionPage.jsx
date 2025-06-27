@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/alert-dialog"
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogDescription } from '@/components/ui/dialog';
+import DevSyncLogo from '@/assets/devsync-logo.png';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -269,6 +270,7 @@ export default function RoomSelectionPage() {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#18181b] via-[#23272f] to-[#1e293b] text-zinc-100">
                 <div className="w-full max-w-md bg-zinc-900/90 rounded-xl shadow-2xl border border-zinc-800 p-8 flex flex-col items-center">
+                    <img src={DevSyncLogo} alt="DevSync Logo" className="w-32 h-12 object-contain shadow-lg mb-2" />
                     <span className="text-3xl font-extrabold bg-gradient-to-r from-indigo-400 via-fuchsia-400 to-pink-400 bg-clip-text text-transparent mb-2">DevSync</span>
                     <span className="text-zinc-400 text-sm mb-6">Collaborate. Code. Run — Together in Real-Time.</span>
                     <h2 className="text-xl font-bold mb-2 text-center">Verify Your Email</h2>
