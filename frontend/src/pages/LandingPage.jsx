@@ -249,16 +249,7 @@ export default function LandingPage() {
             I created DevSync because coding together should be as easy as sharing a link. After struggling to collaborate on code with friends and teammates, I wanted something instant, beautiful, and truly real-time—so I made it. Whether you're building with friends, teaching, or hacking on a project, DevSync lets you collaborate in real time—no installs, no waiting, just code and create together.<br/><br/>
             <span className="italic">— Shalvi Rajpura</span>
           </span>
-          <svg width="80" height="80" viewBox="0 0 80 80" fill="none" className="mb-2 animate-pulse" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="40" cy="40" r="36" fill="url(#paint0_radial)" />
-            <path d="M25 40h30M40 25v30" stroke="#fff" strokeWidth="3" strokeLinecap="round" />
-            <defs>
-              <radialGradient id="paint0_radial" cx="0" cy="0" r="1" gradientTransform="rotate(90 0 40) scale(40)">
-                <stop stopColor="#a5b4fc" />
-                <stop offset="1" stopColor="#f472b6" />
-              </radialGradient>
-            </defs>
-          </svg>
+         
         </div>
       </section>
       {/* Features Section */}

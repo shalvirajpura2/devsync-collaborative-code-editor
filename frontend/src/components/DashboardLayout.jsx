@@ -400,14 +400,14 @@ export default function DashboardLayout({ children }) {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator className="bg-zinc-800" />
-                <DropdownMenuItem disabled>
+                <DropdownMenuItem onClick={() => navigate('/settings')}>
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Settings</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem disabled>
+                {/* <DropdownMenuItem disabled>
                   <LifeBuoy className="mr-2 h-4 w-4" />
                   <span>Support</span>
-                </DropdownMenuItem>
+                </DropdownMenuItem> */}
                 <DropdownMenuSeparator className="bg-zinc-800" />
                 <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />
