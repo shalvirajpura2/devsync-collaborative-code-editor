@@ -7,12 +7,14 @@ import api from '@/lib/axios'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useFirebaseAuth } from '@/hooks/useFirebaseAuth'
 import { toast } from 'sonner'
+import { useNavigate } from 'react-router-dom'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || `ws://${window.location.host}`;
 
 function CodeEditor({ room }) {
   const { user } = useFirebaseAuth();
+  const navigate = useNavigate();
   const [code, setCode] = useState(room.code || '')
   const [output, setOutput] = useState('')
   const [isExecuting, setIsExecuting] = useState(false)
@@ -65,6 +67,11 @@ function CodeEditor({ room }) {
         const message = JSON.parse(event.data)
         if (message.type === 'notification' && message.subtype === 'room_shared') {
           toast.info(message.message)
+        } else if (message.type === 'notification' && message.subtype === 'removed_from_room') {
+          toast.error(message.message)
+          setTimeout(() => {
+            navigate('/app')
+          }, 2000)
         } else if (message.type === 'code_update') {
           setCode(message.code)
         } else if (message.type === 'execution_result') {
