@@ -1,68 +1,64 @@
-# Collaborative Code Editor
+# DevSync: Collaborative Code Editor
 
-A real-time, web-based collaborative code editor for Python, built with FastAPI and React. This application allows multiple users to join coding rooms, write and edit Python code together, and see the execution output in real-time.
+A real-time, web-based collaborative code editor for Python, featuring live code execution, room-based collaboration, and Firebase authentication. Built with FastAPI, React, and Firebase.
 
-![Project Demo](https://placehold.co/600x400/2d3748/ffffff?text=Project+Screenshot)
+![Project Screenshot](frontend/src/assets/dashboard.png)
 
 ---
 
 ## Features
 
-- **Real-Time Collaboration**: Code changes are synchronized across all users in a room instantly using WebSockets.
-- **Code Execution**: Execute Python code on the server and view the output (stdout and stderr) directly in the browser.
-- **Multiple Rooms**: Create new coding rooms or join existing ones.
-- **Simple UI**: A clean and intuitive interface built with React and modern UI components.
-- **Scalable Backend**: Built with the high-performance FastAPI framework.
-- **Easy to Run**: Fully containerized with Docker for easy setup and deployment.
+- **Real-Time Collaboration:** Instantly sync code changes across all users in a room using WebSockets.
+- **Room System:** Create or join coding rooms for focused collaboration.
+- **Live Code Execution:** Run Python code on the server and view output in real time.
+- **Authentication:** Secure login and registration with Firebase Auth.
+- **Modern UI:** Clean, responsive interface built with React, Radix UI, and Tailwind CSS.
+- **Scalable Backend:** FastAPI, MongoDB, and Uvicorn power the backend.
 
 ---
 
 ## Tech Stack
 
-| Area      | Technology                               |
-|-----------|------------------------------------------|
-| **Backend** | Python, FastAPI, MongoDB, Uvicorn, WebSockets |
-| **Frontend**| React, Vite, Monaco Editor, Radix UI, Tailwind CSS |
-| **Database**| MongoDB                                  |
+| Area        | Technology                                                      |
+|-------------|-----------------------------------------------------------------|
+| **Backend** | Python, FastAPI, Uvicorn, MongoDB, WebSockets, Firebase Admin   |
+| **Frontend**| React, Vite, Monaco Editor, Radix UI, Tailwind CSS, Firebase JS |
+| **Database**| MongoDB                                                         |
+| **Auth**    | Firebase Authentication                                         |
 
 ---
 
 ## Project Structure
-
-The project is a monorepo containing two main packages: `backend` and `frontend`.
 
 ```
 /
 ├── backend/
 │   ├── src/
 │   │   ├── api/          # API routes and endpoints
-│   │   ├── core/         # Configuration (env vars)
+│   │   ├── core/         # Config, Firebase, Auth
 │   │   ├── db/           # Database connection
-│   │   ├── models/       # Pydantic data models
-│   │   ├── services/     # Business logic
-│   │   └── main.py       # Main FastAPI app entrypoint
+│   │   ├── models/       # Pydantic models
+│   │   ├── services/     # Business logic (code exec, websockets)
+│   │   └── main.py       # FastAPI app entrypoint
 │   └── requirements.txt  # Python dependencies
 │
 ├── frontend/
 │   ├── src/
-│   │   ├── components/   # Reusable React components
-│   │   ├── pages/        # Page components (routed)
-│   │   ├── App.jsx       # Root component with routing
+│   │   ├── components/   # React components
+│   │   ├── pages/        # Page components
+│   │   ├── hooks/        # Custom React hooks
+│   │   ├── lib/          # Firebase config, axios, utils
 │   │   └── main.jsx      # Frontend entrypoint
-│   ├── .env.example      # Environment variable template
 │   └── package.json      # Node.js dependencies
 │
-└── .gitignore            # Files to ignore in version control
+└── README.md             # Project documentation
 ```
 
 ---
 
 ## Getting Started
 
-Follow these instructions to get the project up and running on your local machine.
-
 ### Prerequisites
-
 - [Python 3.8+](https://www.python.org/)
 - [Node.js 16+](https://nodejs.org/) (with npm or pnpm)
 - [MongoDB](https://www.mongodb.com/try/download/community) instance running
@@ -76,76 +72,67 @@ cd your-repo-name
 
 ### 2. Backend Setup
 
-First, set up and run the backend server.
+```sh
+cd backend
+python -m venv venv
+# On Windows:
+venv\Scripts\activate
+# On Mac/Linux:
+# source venv/bin/activate
+pip install -r requirements.txt
+```
+
+#### Backend Environment Variables
+- `MONGO_DETAILS` (default: `mongodb://localhost:27017`)
+- `FIREBASE_SERVICE_ACCOUNT_PATH` (path to your Firebase service account JSON)
+- `GSHEET_CREDENTIALS_FILE` (if using Google Sheets integration)
+
+You can set these in your shell or with a `.env` file (use [python-dotenv](https://pypi.org/project/python-dotenv/)).
+
+#### Run the Backend
 
 ```sh
-# Navigate to the backend directory
-cd backend
-
-# Create a virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run the server
-# The server will run on http://localhost:5000
 uvicorn src.main:app --reload --port 5000
 ```
 
 ### 3. Frontend Setup
 
-In a separate terminal, set up and run the frontend development server.
-
 ```sh
-# Navigate to the frontend directory
 cd frontend
-
-# Copy the environment variable template
-cp .env.example .env
-
-# Make sure the variables in .env point to your backend.
-# Default:
-# VITE_API_BASE_URL=http://localhost:5000
-# VITE_WS_BASE_URL=ws://localhost:5000
-
-# Install dependencies (using pnpm is recommended)
-pnpm install
-
-# Run the development server
-# The app will be available at http://localhost:5173
-pnpm dev
+pnpm install  # or npm install
 ```
 
-### 4. Access the Application
+#### Firebase Configuration
+Edit `src/lib/firebase.js` with your Firebase project credentials. (These are currently hardcoded.)
 
-Open your browser and navigate to `http://localhost:5173`. You should see the collaborative code editor running!
+#### (Optional) Frontend Environment Variables
+If you want to use environment variables, create a `.env` file in `frontend/`:
+
+```
+# Example .env
+VITE_API_BASE_URL=http://localhost:5000
+VITE_WS_BASE_URL=ws://localhost:5000
+```
+
+#### Run the Frontend
+
+```sh
+pnpm dev  # or npm run dev
+```
+
+The app will be available at [http://localhost:5173](http://localhost:5173).
 
 ---
 
 ## How It Works
 
-1.  **Room Management**: Users can create or join rooms from the main page. Room data is stored in MongoDB.
-2.  **Editor View**: When a user joins a room, they are taken to the editor page. The URL contains the unique room ID.
-3.  **WebSocket Connection**: The frontend establishes a WebSocket connection to the backend for the specific room.
-4.  **Real-Time Sync**: When a user types in the editor, the code changes are sent through the WebSocket to the backend, which then broadcasts the changes to all other users in the same room.
-5.  **Code Execution**: When the "Run" button is clicked, the code is sent to a secure API endpoint on the backend. The backend executes the code in a temporary file and returns the result, which is then broadcast to all users via WebSocket.
+1. **Authentication:** Users sign up or log in with Firebase Auth. The frontend manages auth state and sends the JWT to the backend for verification.
+2. **Room Management:** Users create or join rooms. Room data is stored in MongoDB.
+3. **Real-Time Sync:** The frontend connects to the backend via WebSockets. Code changes are broadcast to all users in the room.
+4. **Code Execution:** When a user runs code, it is sent to the backend, executed in a sandbox, and the result is broadcast to all room members.
 
 ---
 
-## Contributing
+## Contact
 
-Contributions are welcome! Please feel free to open an issue or submit a pull request.
-
-1.  Fork the Project
-2.  Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3.  Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4.  Push to the Branch (`git push origin feature/AmazingFeature`)
-5.  Open a Pull Request
-
----
-
-## License
-
-This project is licensed under the MIT License - see the `LICENSE` file for details. 
+For questions or support, open an issue on GitHub. 
