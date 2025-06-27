@@ -75,6 +75,9 @@ function CodeEditor({ room }) {
     setCode(value || '')
     lastUpdateRef.current = Date.now()
     
+    // Log the current local time when code changes
+    console.log('Code changed at:', new Date().toLocaleString())
+    
     // Send code update via WebSocket
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({

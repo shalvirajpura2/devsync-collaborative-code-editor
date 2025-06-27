@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from src.api import rooms
+from src.api import requests as api_requests
 
 app = FastAPI(title="Collaborative Code Editor")
 
@@ -24,6 +25,7 @@ app.add_middleware(
 
 # Include API routers
 app.include_router(rooms.router)
+app.include_router(api_requests.router)
 
 # Serve static files from the 'static' directory
 static_folder_path = os.path.join(os.path.dirname(__file__), 'static')

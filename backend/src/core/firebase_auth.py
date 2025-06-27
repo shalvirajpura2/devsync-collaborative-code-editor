@@ -10,5 +10,6 @@ async def get_current_user(request: Request):
     try:
         decoded_token = firebase_auth.verify_id_token(token)
         return decoded_token  # contains 'uid', 'email', etc.
-    except Exception:
+    except Exception as e:
+        print(f"Token verification error: {e}")  # Log the real error
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid auth token") 
