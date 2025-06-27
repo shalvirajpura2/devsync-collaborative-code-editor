@@ -4,9 +4,11 @@ import api from '@/lib/axios';
 import CodeEditor from '@/components/CodeEditor';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Users, Copy } from 'lucide-react';
+import { Users, Copy, Bell } from 'lucide-react';
 import { toast } from "sonner";
 import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -60,7 +62,6 @@ export default function EditorPage() {
                 setMembers(response.data.members);
             } catch (err) {
                 setMembers([]);
-                // Optional: toast error for member fetching
             } finally {
                 setMembersLoading(false);
             }
@@ -87,45 +88,77 @@ export default function EditorPage() {
     }
 
     return (
-        <div className="p-6 md:p-10">
-            <div className="mb-6 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <Button variant="outline" onClick={() => navigate('/app')}>
+        <div className="flex flex-col h-full w-full">
+            {/* Custom Editor Header */}
+            <header className="flex items-center justify-between px-4 md:px-8 py-4 border-b border-zinc-800 bg-zinc-950/95 sticky top-0 z-20 w-full">
+                {/* Left: Back button and room info */}
+                <div className="flex items-center gap-6 min-w-0">
+                    <Button variant="outline" size="sm" onClick={() => navigate('/app')}>
                         ← Back to Rooms
                     </Button>
-                    <div>
-                        <h1 className="text-xl font-semibold">{room.name}</h1>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <span>Room ID: {room._id}</span>
-                            <Button variant="ghost" size="sm" onClick={copyRoomId}>
-                                <Copy className="h-3 w-3" />
-                            </Button>
-                        </div>
+                    <div className="flex flex-col min-w-0">
+                        <span className="text-lg md:text-2xl font-bold truncate text-zinc-100">{room?.name}</span>
+                        <span className="text-xs md:text-sm text-zinc-400 truncate">Room ID: {room?._id}</span>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4" />
-                    <Badge variant="secondary">{room.users?.length || 0} users</Badge>
+                {/* Right: Participants, avatar, bell */}
+                <div className="flex items-center gap-4 md:gap-6">
+                    {/* Participants badge with dropdown */}
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Badge
+                                variant="secondary"
+                                className="cursor-pointer flex items-center gap-2 px-4 py-2 text-base font-semibold bg-zinc-800 text-zinc-100 hover:bg-zinc-700 focus:ring-2 focus:ring-indigo-500 transition-all"
+                            >
+                                <Users className="h-5 w-5" />
+                                {members.length} users
+                            </Badge>
+                        </PopoverTrigger>
+                        <PopoverContent
+                            align="end"
+                            className="max-w-xs w-full bg-zinc-900 border-zinc-800 py-4 px-4 rounded-xl shadow-2xl mt-2 z-50 max-h-72 overflow-auto"
+                            sideOffset={8}
+                        >
+                            <div className="font-semibold mb-3 text-zinc-200 text-lg">Participants</div>
+                            {membersLoading ? (
+                                <div className="text-zinc-400 text-base py-4">Loading...</div>
+                            ) : (
+                                <div className="flex flex-col gap-3">
+                                    {members.map((member) => (
+                                        <div
+                                            key={member.uid}
+                                            className="flex items-center gap-3 bg-zinc-800/80 px-3 py-2 rounded-lg border border-zinc-700 transition-colors hover:bg-zinc-700/80 focus:bg-zinc-700/80 cursor-pointer"
+                                            tabIndex={0}
+                                        >
+                                            {/* Avatar Circle */}
+                                            <span className="flex items-center justify-center h-8 w-8 rounded-full bg-indigo-600 text-white font-bold text-base select-none">
+                                                {(member.display_name || member.email || member.uid)[0]?.toUpperCase()}
+                                            </span>
+                                            {/* Name/Email */}
+                                            <span className="flex flex-col min-w-0">
+                                                <span className="font-medium text-zinc-100 text-base truncate max-w-[10rem]">
+                                                    {member.display_name || member.email || member.uid}
+                                                </span>
+                                                {member.email && (
+                                                    <span className="text-xs text-zinc-400 truncate max-w-[10rem]">{member.email}</span>
+                                                )}
+                                            </span>
+                                            {/* Owner badge */}
+                                            {room.owner === member.uid && (
+                                                <Badge variant="outline" className="ml-2 text-xs px-2 py-0.5 border-indigo-400 text-indigo-300">Owner</Badge>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </PopoverContent>
+                    </Popover>
+                
                 </div>
-            </div>
-            {/* Room members list */}
-            <div className="mb-6">
-                <h2 className="text-base font-semibold mb-2">Participants:</h2>
-                {membersLoading ? (
-                    <div>Loading members...</div>
-                ) : (
-                    <div className="flex flex-wrap gap-4">
-                        {members.map((member) => (
-                            <div key={member.uid} className="flex items-center gap-2 bg-muted px-3 py-1 rounded">
-                                <span className="font-medium">{member.display_name || member.email || member.uid}</span>
-                                {member.email && <span className="text-xs text-muted-foreground">({member.email})</span>}
-                                {room.owner === member.uid && <Badge variant="outline">Owner</Badge>}
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-            <div className="flex-1">
+            </header>
+            {/* Main content area (code editor, etc.) */}
+            <div className="flex-1 overflow-auto">
+                {/* Remove any duplicate header here, just render the editor */}
                 <CodeEditor room={room} />
             </div>
         </div>

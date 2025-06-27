@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 
 export default function DashboardLayout({ children }) {
   const { user, logout } = useFirebaseAuth();
@@ -31,6 +32,10 @@ export default function DashboardLayout({ children }) {
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [renameValue, setRenameValue] = useState("");
   const shownActionToastIds = useRef(new Set(JSON.parse(localStorage.getItem('shownActionToastIds') || '[]')));
+  const [notifications, setNotifications] = useState([]);
+  const wsRef = useRef(null);
+  const [actionDialogOpen, setActionDialogOpen] = useState(false);
+  const [actionDialogMessage, setActionDialogMessage] = useState('');
 
   const fetchPendingRequests = async () => {
     if (!user) return;
@@ -49,15 +54,28 @@ export default function DashboardLayout({ children }) {
   }, [user]);
 
   useEffect(() => {
-    const fetchRecentRooms = () => {
-        if (user) {
-            const storedRooms = JSON.parse(localStorage.getItem(`recentRooms_${user.uid}`) || '[]');
-            setRecentRooms(storedRooms);
+    const fetchRecentRooms = async () => {
+      if (user) {
+        const storedRooms = JSON.parse(localStorage.getItem(`recentRooms_${user.uid}`) || '[]');
+        // Fetch all rooms the user has access to
+        let validRoomIds = new Set();
+        try {
+          const response = await api.get('/api/rooms');
+          if (Array.isArray(response.data)) {
+            validRoomIds = new Set(response.data.map(r => r._id));
+          }
+        } catch (e) {
+          // If API fails, fallback to showing all stored rooms
+          setRecentRooms(storedRooms);
+          return;
         }
+        // Filter out rooms that no longer exist
+        const filteredRooms = storedRooms.filter(r => validRoomIds.has(r.id));
+        setRecentRooms(filteredRooms);
+        localStorage.setItem(`recentRooms_${user.uid}`, JSON.stringify(filteredRooms));
+      }
     };
-    
     fetchRecentRooms();
-    
     window.addEventListener('storage', fetchRecentRooms);
     return () => window.removeEventListener('storage', fetchRecentRooms);
   }, [user]);
@@ -84,9 +102,6 @@ export default function DashboardLayout({ children }) {
     const seen = JSON.parse(localStorage.getItem(`seenRequestNotis_${user.uid}`) || '{}');
     myRequests.forEach(req => {
       if ((req.status === 'approved' || req.status === 'denied') && !seen[req.request_id]) {
-        toast[req.status === 'approved' ? 'success' : 'error'](
-          `Your request to join "${req.room_name}" was ${req.status}.`
-        );
         seen[req.request_id] = true;
       }
     });
@@ -141,8 +156,6 @@ export default function DashboardLayout({ children }) {
     let updated = false;
     filteredPendingRequests.forEach(req => {
       if (!seenOwner.has(req.request_id) && !cleared.has(req.request_id)) {
-        toast.info(`New join request for "${req.room_name}" from ${req.requester_email}`);
-        seenOwner.add(req.request_id);
         updated = true;
       }
     });
@@ -152,11 +165,6 @@ export default function DashboardLayout({ children }) {
   const handleApprove = async (requestId) => {
     try {
       await api.post(`/api/requests/${requestId}/approve`);
-      if (!shownActionToastIds.current.has(requestId)) {
-        toast.success("Request approved!");
-        shownActionToastIds.current.add(requestId);
-        localStorage.setItem('shownActionToastIds', JSON.stringify(Array.from(shownActionToastIds.current)));
-      }
       fetchPendingRequests();
     } catch (error) {
       toast.error("Failed to approve request.");
@@ -166,11 +174,6 @@ export default function DashboardLayout({ children }) {
   const handleDeny = async (requestId) => {
     try {
       await api.post(`/api/requests/${requestId}/deny`);
-      if (!shownActionToastIds.current.has(requestId)) {
-        toast.info("Request denied.");
-        shownActionToastIds.current.add(requestId);
-        localStorage.setItem('shownActionToastIds', JSON.stringify(Array.from(shownActionToastIds.current)));
-      }
       fetchPendingRequests();
     } catch (error) {
       toast.error("Failed to deny request.");
@@ -214,7 +217,22 @@ export default function DashboardLayout({ children }) {
     try {
       await api.delete(`/api/rooms/${selectedRoom.id}`);
       toast.success('Room deleted.');
-      setRecentRooms(prev => prev.filter(r => r.id !== selectedRoom.id));
+      // Re-fetch recent rooms to ensure sidebar is up-to-date
+      if (user) {
+        const storedRooms = JSON.parse(localStorage.getItem(`recentRooms_${user.uid}`) || '[]');
+        let validRoomIds = new Set();
+        try {
+          const response = await api.get('/api/rooms');
+          if (Array.isArray(response.data)) {
+            validRoomIds = new Set(response.data.map(r => r._id));
+          }
+        } catch (e) {
+          setRecentRooms(storedRooms);
+        }
+        const filteredRooms = storedRooms.filter(r => validRoomIds.has(r.id));
+        setRecentRooms(filteredRooms);
+        localStorage.setItem(`recentRooms_${user.uid}`, JSON.stringify(filteredRooms));
+      }
       setShowDialog(false);
     } catch {
       toast.error('Failed to delete room.');
@@ -228,85 +246,135 @@ export default function DashboardLayout({ children }) {
       : myRequests.length
   );
 
+  // Real-time WebSocket notifications only
+  useEffect(() => {
+    if (!user) return;
+    const ws = new WebSocket(`${import.meta.env.VITE_WS_BASE_URL || `ws://${window.location.host}`}/ws/notifications`);
+    ws.onopen = () => {
+      if (user?.uid) {
+        ws.send(JSON.stringify({ type: 'auth', user_uid: user.uid }));
+      }
+    };
+    ws.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === 'notification') {
+        setNotifications((prev) => [message, ...prev]);
+      }
+    };
+    ws.onerror = () => {};
+    ws.onclose = () => {};
+    wsRef.current = ws;
+    return () => {
+      ws.close();
+    };
+  }, [user]);
+
+  const handleApproveRequest = async (notif, idx) => {
+    try {
+      await api.post(`/api/requests/${notif.request_id}/approve`);
+      setActionDialogMessage('Join request approved. The user will be notified.');
+      setActionDialogOpen(true);
+      setNotifications((prev) => prev.filter((_, i) => i !== idx));
+    } catch (error) {
+      setActionDialogMessage('Failed to approve join request.');
+      setActionDialogOpen(true);
+    }
+  };
+  const handleDenyRequest = async (notif, idx) => {
+    try {
+      await api.post(`/api/requests/${notif.request_id}/deny`);
+      setActionDialogMessage('Join request denied. The user will be notified.');
+      setActionDialogOpen(true);
+      setNotifications((prev) => prev.filter((_, i) => i !== idx));
+    } catch (error) {
+      setActionDialogMessage('Failed to deny join request.');
+      setActionDialogOpen(true);
+    }
+  };
+
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-[#18181b] via-[#23272f] to-[#1e293b] text-zinc-100 font-sans">
+    <div className="h-screen w-screen overflow-hidden flex bg-gradient-to-br from-[#18181b] via-[#23272f] to-[#1e293b] text-zinc-100 font-sans">
       {/* Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 bg-zinc-900/90 border-r border-zinc-800 p-6 gap-8">
-        <div className="flex items-center gap-2 mb-8">
-          <Code className="w-7 h-7 text-indigo-400" />
-          <span className="text-2xl font-extrabold bg-gradient-to-r from-indigo-400 via-fuchsia-400 to-pink-400 bg-clip-text text-transparent">DevSync</span>
-        </div>
-        <nav className="flex flex-col gap-2">
-          {navItems.map((item) => (
-            <button
-              key={item.label}
-              className={`flex items-center gap-3 px-4 py-2 rounded-lg transition-colors text-left ${location.pathname === item.path ? 'bg-indigo-700/30 text-indigo-300' : 'hover:bg-zinc-800/80'}`}
-              onClick={() => navigate(item.path)}
-            >
-              {item.icon}
-              <span className="font-medium">{item.label}</span>
-            </button>
-          ))}
-        </nav>
-        
-        <div className="mt-8 pt-4 border-t border-zinc-800">
+      <aside className="hidden md:flex fixed z-20 top-0 left-0 h-full w-64 flex-col bg-zinc-900/90 border-r border-zinc-800 pt-0 pb-0">
+        <div className="flex flex-col h-full overflow-y-auto p-6 gap-8">
+          <div className="flex items-center gap-2 mb-8 mt-2">
+            <Code className="w-7 h-7 text-indigo-400" />
+            <span className="text-2xl font-extrabold bg-gradient-to-r from-indigo-400 via-fuchsia-400 to-pink-400 bg-clip-text text-transparent">DevSync</span>
+          </div>
+          <nav className="flex flex-col gap-2">
+            {navItems.map((item) => (
+              <button
+                key={item.label}
+                className={`flex items-center gap-3 px-4 py-2 rounded-lg transition-colors text-left ${location.pathname === item.path ? 'bg-indigo-700/30 text-indigo-300' : 'hover:bg-zinc-800/80'}`}
+                onClick={() => navigate(item.path)}
+              >
+                {item.icon}
+                <span className="font-medium">{item.label}</span>
+              </button>
+            ))}
+          </nav>
+          <div className="mt-8 pt-4 border-t border-zinc-800">
             <h3 className="px-4 text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Recent Rooms</h3>
             <div className="flex flex-col gap-1">
-                {recentRooms.length > 0 ? recentRooms.map(room => (
-                    <div key={room.id} className="group flex items-center justify-between rounded-lg hover:bg-zinc-800/80">
-                        <button 
-                            className="flex-1 text-left text-sm px-4 py-2 truncate"
-                            onClick={() => navigate(`/editor/${room.id}`)}
-                        >
-                            {room.name}
-                        </button>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button className="p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <MoreVertical className="h-4 w-4 text-zinc-400" />
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-40 bg-zinc-900 border-zinc-800">
-                            <button
-                              className="flex items-center gap-2 w-full px-2 py-1 hover:bg-zinc-800 rounded"
-                              onClick={() => {
-                                if (user?.uid !== room.owner) {
-                                  toast.error('You do not own this room.');
-                                } else {
-                                  handleRecentRename(room);
-                                }
-                              }}
-                            >
-                              <Settings className="h-4 w-4" /> Rename
-                            </button>
-                            <button
-                              className="flex items-center gap-2 w-full px-2 py-1 hover:bg-zinc-800 rounded text-red-400"
-                              onClick={() => {
-                                if (user?.uid !== room.owner) {
-                                  toast.error('You do not own this room.');
-                                } else {
-                                  handleRecentDelete(room);
-                                }
-                              }}
-                            >
-                              <LogOut className="h-4 w-4" /> Delete
-                            </button>
-                          </PopoverContent>
-                        </Popover>
-                    </div>
-                )) : (
-                    <p className="px-4 text-sm text-zinc-500">No recent rooms.</p>
-                )}
+              {recentRooms.length > 0 ? recentRooms.map(room => (
+                <div key={room.id} className="group flex items-center justify-between rounded-lg hover:bg-zinc-800/80">
+                  <button 
+                    className="flex-1 text-left text-sm px-4 py-2 truncate"
+                    onClick={() => navigate(`/editor/${room.id}`)}
+                  >
+                    {room.name}
+                  </button>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button className="p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <MoreVertical className="h-4 w-4 text-zinc-400" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-40 bg-zinc-900 border-zinc-800">
+                      <button
+                        className="flex items-center gap-2 w-full px-2 py-1 hover:bg-zinc-800 rounded"
+                        onClick={() => {
+                          if (user?.uid !== room.owner) {
+                            toast.error('You do not own this room.');
+                          } else {
+                            handleRecentRename(room);
+                          }
+                        }}
+                      >
+                        <Settings className="h-4 w-4" /> Rename
+                      </button>
+                      <button
+                        className="flex items-center gap-2 w-full px-2 py-1 hover:bg-zinc-800 rounded text-red-400"
+                        onClick={() => {
+                          if (user?.uid !== room.owner) {
+                            toast.error('You do not own this room.');
+                          } else {
+                            handleRecentDelete(room);
+                          }
+                        }}
+                      >
+                        <LogOut className="h-4 w-4" /> Delete
+                      </button>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )) : (
+                <p className="px-4 text-sm text-zinc-500">No recent rooms.</p>
+              )}
             </div>
+          </div>
+          <div className="mt-auto"></div>
         </div>
-        
-        <div className="mt-auto"></div>
       </aside>
       {/* Main Area */}
-      <div className="flex-1 flex flex-col min-h-screen">
+      <div className="flex-1 flex flex-col h-screen ml-0 md:ml-64">
         {/* Header */}
-        <header className="flex items-center justify-between px-6 py-4 bg-zinc-900/80 border-b border-zinc-800 shadow-sm">
+        <header className="fixed z-30 top-0 left-0 md:left-64 w-full md:w-[calc(100%-16rem)] flex items-center justify-between px-6 py-4 bg-zinc-900/80 border-b border-zinc-800 shadow-sm">
           <div className="flex items-center gap-3">
+            {/* Mobile menu button placeholder */}
+            <button className="md:hidden mr-2 p-2 rounded hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-indigo-500" aria-label="Open sidebar">
+              <svg className="h-6 w-6 text-zinc-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+            </button>
             <span className="text-xl font-bold tracking-tight">Dashboard</span>
             {/* Add breadcrumbs or page title here if needed */}
           </div>
@@ -351,56 +419,46 @@ export default function DashboardLayout({ children }) {
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative">
                   <Bell className="h-5 w-5" />
-                  {bellCount > 0 && (
+                  {notifications.length > 0 && (
                     <Badge variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 justify-center p-0">
-                      {bellCount}
+                      {notifications.length}
                     </Badge>
                   )}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-80 bg-zinc-900 border-zinc-800 text-zinc-100">
-                <div className="font-medium leading-none mb-2">Requests</div>
-                {user && pendingRequests.length > 0 && pendingRequests[0].owner_uid === user.uid ? (
-                  pendingRequests.map(req => (
-                    <div key={req.request_id} className="flex items-center justify-between p-3 mb-2 rounded-lg bg-zinc-800/60 shadow">
-                      <div>
-                        <div className="font-semibold">{req.requester_email}</div>
-                        <div className="text-xs text-zinc-400">
-                          wants to join <span className="font-semibold text-indigo-400">{req.room_name}</span>
+              <PopoverContent className="w-80 bg-zinc-900 border-zinc-800 text-zinc-100 fixed right-4 top-16 z-50">
+                <div className="font-medium leading-none mb-2">Notifications</div>
+                {notifications.length > 0 ? (
+                  notifications.map((notif, idx) => (
+                    <div key={idx} className="p-3 mb-2 rounded-lg bg-zinc-800/60 shadow">
+                      <div className="font-semibold">{notif.message}</div>
+                      {notif.subtype === 'join_request' && (
+                        <div className="flex gap-2 mt-2">
+                          <Button size="sm" variant="outline" className="bg-green-500/10 border-green-500/20 hover:bg-green-500/20" onClick={() => handleApproveRequest(notif, idx)}>
+                            <Check className="h-4 w-4 text-green-400" />
+                          </Button>
+                          <Button size="sm" variant="outline" className="bg-red-500/10 border-red-500/20 hover:bg-red-500/20" onClick={() => handleDenyRequest(notif, idx)}>
+                            <X className="h-4 w-4 text-red-400" />
+                          </Button>
                         </div>
-                        <div className="text-xs text-zinc-500">{formatDistanceToNow(new Date(req.created_at), { addSuffix: true })}</div>
-                      </div>
-                      <div className="flex flex-col gap-2 ml-4">
-                        <Button size="icon" variant="outline" className="bg-green-500/10 border-green-500/20 hover:bg-green-500/20" onClick={() => handleApprove(req.request_id)}>
-                          <Check className="h-4 w-4 text-green-400" />
-                        </Button>
-                        <Button size="icon" variant="outline" className="bg-red-500/10 border-red-500/20 hover:bg-red-500/20" onClick={() => handleDeny(req.request_id)}>
-                          <X className="h-4 w-4 text-red-400" />
-                        </Button>
-                      </div>
+                      )}
                     </div>
                   ))
                 ) : (
-                  myRequests.length > 0 ? (
-                    myRequests.map(req => (
-                      <div key={req.request_id} className="flex items-center justify-between p-2 rounded bg-zinc-800/50 mb-2">
-                        <div>
-                          <span className="font-medium">Request to {req.room_name}</span>
-                          <span className="text-xs text-zinc-400 ml-2">Status: <span className="font-semibold text-indigo-400">{req.status}</span></span>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-zinc-400 text-center py-4">No requests.</p>
-                  )
+                  <p className="text-sm text-zinc-400 text-center py-4">No notifications.</p>
                 )}
+                <Button variant="ghost" size="sm" onClick={() => setNotifications([])} className="w-full mt-2">
+                  Clear All
+                </Button>
               </PopoverContent>
             </Popover>
           </div>
         </header>
         {/* Content */}
-        <main className="flex-1 p-6 md:p-10 bg-transparent">
-          {children}
+        <main className="flex-1 overflow-auto pt-[72px] md:pt-[72px] p-0 md:p-0 bg-transparent">
+          <div className="p-6 md:p-10">
+            {children}
+          </div>
         </main>
       </div>
       <AlertDialog open={showDialog} onOpenChange={setShowDialog}>
@@ -428,6 +486,19 @@ export default function DashboardLayout({ children }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <Dialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Join Request</DialogTitle>
+          </DialogHeader>
+          <div className="my-4 text-zinc-200">{actionDialogMessage}</div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Okay</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 } 

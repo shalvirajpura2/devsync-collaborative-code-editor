@@ -200,6 +200,18 @@ async def share_room(room_id: str, share_request: ShareRequest, user=Depends(get
         {"_id": ObjectId(room_id)},
         {"$addToSet": {"shared_with": share_with_uid}}
     )
+    # Send real-time notification
+    await manager.send_notification_to_user(
+        share_with_uid,
+        json.dumps({
+            "type": "notification",
+            "subtype": "room_shared",
+            "room_id": room_id,
+            "room_name": room["name"],
+            "from_email": user["email"],
+            "message": f"Room '{room['name']}' was shared with you by {user['email']}"
+        })
+    )
     return {"message": "Room shared successfully"}
 
 @router.post("/api/rooms/{room_id}/share-by-email")
@@ -225,6 +237,18 @@ async def share_room_by_email(room_id: str, request: ShareByEmailRequest, user=D
     await db.rooms.update_one(
         {"_id": ObjectId(room_id)},
         {"$addToSet": {"shared_with": share_with_uid}}
+    )
+    # Send real-time notification
+    await manager.send_notification_to_user(
+        share_with_uid,
+        json.dumps({
+            "type": "notification",
+            "subtype": "room_shared",
+            "room_id": room_id,
+            "room_name": room["name"],
+            "from_email": user["email"],
+            "message": f"Room '{room['name']}' was shared with you by {user['email']}"
+        })
     )
     return {"message": f"Room shared with {email} successfully"}
 

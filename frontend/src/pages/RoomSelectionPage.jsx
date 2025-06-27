@@ -41,6 +41,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogDescription } from '@/components/ui/dialog';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 export default function RoomSelectionPage() {
@@ -65,6 +67,14 @@ export default function RoomSelectionPage() {
     const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
     const [selectedRoom, setSelectedRoom] = useState(null);
     const [renamedRoomName, setRenamedRoomName] = useState("");
+
+    const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+    const [shareEmail, setShareEmail] = useState('');
+    const [shareRoomId, setShareRoomId] = useState(null);
+    const [shareLoading, setShareLoading] = useState(false);
+
+    const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
+    const [joinDialogMessage, setJoinDialogMessage] = useState('');
 
     const isValidObjectId = useMemo(() => {
         return /^[0-9a-fA-F]{24}$/.test(joinRoomId);
@@ -158,33 +168,20 @@ export default function RoomSelectionPage() {
         if (!roomId.trim()) return;
         setJoinLoading(true);
         try {
-            await api.get(`/api/rooms/${roomId}`);
-            navigate(`/editor/${roomId}`);
+            await api.post(`/api/requests/join?room_id=${roomId}`);
+            setJoinDialogMessage('Join request sent to the room owner. You will be notified when approved.');
+            setIsJoinDialogOpen(true);
         } catch (error) {
-            const errorMessage = error.response?.data?.detail || "An unexpected error occurred.";
-            if (error.response?.status === 403) {
-                toast.error("You are not authorized to access this room.", {
-                    action: {
-                        label: "Request to Join",
-                        onClick: () => requestToJoin(roomId),
-                    },
-                });
-            } else if (error.response?.status === 404) {
-                toast.error("Room not found. Please check the ID.");
+            const errorMessage = error.response?.data?.detail || 'An unexpected error occurred.';
+            // If already have access, navigate to editor
+            if (errorMessage.toLowerCase().includes('already have access')) {
+                navigate(`/editor/${roomId}`);
             } else {
-                toast.error(`Error: ${errorMessage}`);
+                setJoinDialogMessage(errorMessage);
+                setIsJoinDialogOpen(true);
             }
         } finally {
             setJoinLoading(false);
-        }
-    };
-
-    const requestToJoin = async (roomId) => {
-        try {
-            const response = await api.post(`/api/requests/join?room_id=${roomId}`);
-            toast.success(response.data.message);
-        } catch (error) {
-            toast.error(error.response?.data?.detail || "Failed to send join request.");
         }
     };
 
@@ -204,14 +201,23 @@ export default function RoomSelectionPage() {
         }
     };
 
-    const shareRoomByEmail = async (roomId) => {
-        const email = prompt('Enter the email of the user to share with:');
-        if (!email) return;
+    const shareRoomByEmail = (roomId) => {
+        setShareRoomId(roomId);
+        setShareEmail('');
+        setIsShareDialogOpen(true);
+    };
+
+    const handleShareRoomByEmail = async () => {
+        if (!shareEmail.trim()) return;
+        setShareLoading(true);
         try {
-            const response = await api.post(`/api/rooms/${roomId}/share-by-email`, { email });
+            const response = await api.post(`/api/rooms/${shareRoomId}/share-by-email`, { email: shareEmail });
             toast.success(response.data.message);
+            setIsShareDialogOpen(false);
         } catch (error) {
             toast.error(error.response?.data?.detail || 'Failed to share room by email');
+        } finally {
+            setShareLoading(false);
         }
     };
 
@@ -400,6 +406,50 @@ export default function RoomSelectionPage() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            {/* Share by Email Dialog */}
+            <Dialog open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Share Room by Email</DialogTitle>
+                    </DialogHeader>
+                    <Input
+                        type="email"
+                        placeholder="Enter email address"
+                        value={shareEmail}
+                        onChange={e => setShareEmail(e.target.value)}
+                        className="my-4"
+                        autoFocus
+                    />
+                    <DialogFooter>
+                        <DialogClose asChild>
+                            <Button variant="outline">Cancel</Button>
+                        </DialogClose>
+                        <Button onClick={handleShareRoomByEmail} disabled={shareLoading || !shareEmail.trim()}>
+                            {shareLoading ? 'Sharing...' : 'Share'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Join Room Dialog */}
+            <Dialog open={isJoinDialogOpen} onOpenChange={setIsJoinDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Join Room</DialogTitle>
+                        <DialogDescription>
+                            {/* This description is for accessibility and screen readers */}
+                            {joinDialogMessage}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="my-4 text-zinc-200">{joinDialogMessage}</div>
+                    <DialogFooter>
+                        <DialogClose asChild>
+                            <Button variant="outline">Okay</Button>
+                        </DialogClose>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </TooltipProvider>
     );
     
@@ -438,7 +488,15 @@ export default function RoomSelectionPage() {
         // Helper to format UTC date to user's local time
         const getLocalTime = (utcDate) => {
             if (!utcDate) return null;
-            return new Date(utcDate).toLocaleString(); // User's local time
+            const date = new Date(utcDate);
+            return date.toLocaleString(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
         };
 
         return (
@@ -473,7 +531,7 @@ export default function RoomSelectionPage() {
                                     </DropdownMenu>
                                 )}
                             </CardTitle>
-                            <Tooltip>
+                            {/* <Tooltip>
                                 <TooltipTrigger>
                                     <CardDescription>
                                         {room.last_activity 
@@ -485,7 +543,7 @@ export default function RoomSelectionPage() {
                                 <TooltipContent>
                                     <p>{room.last_activity ? formatDistanceToNow(new Date(room.last_activity), { addSuffix: true }) : 'N/A'}</p>
                                 </TooltipContent>
-                            </Tooltip>
+                            </Tooltip> */}
                         </CardHeader>
                         <CardContent className="flex-grow space-y-4">
                              <div className="flex items-center gap-2">

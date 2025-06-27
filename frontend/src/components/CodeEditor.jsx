@@ -1,84 +1,94 @@
 import { useState, useEffect, useRef } from 'react'
 import { Editor } from '@monaco-editor/react'
 import { Button } from '@/components/ui/button.jsx'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
-import { Separator } from '@/components/ui/separator.jsx'
-import { Play, Square, Terminal, Users } from 'lucide-react'
+import { Play, Copy, Users, Check, Terminal } from 'lucide-react'
 import api from '@/lib/axios'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { useFirebaseAuth } from '@/hooks/useFirebaseAuth'
+import { toast } from 'sonner'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || `ws://${window.location.host}`;
 
 function CodeEditor({ room }) {
+  const { user } = useFirebaseAuth();
   const [code, setCode] = useState(room.code || '')
   const [output, setOutput] = useState('')
   const [isExecuting, setIsExecuting] = useState(false)
-  const [isConnected, setIsConnected] = useState(false)
-  const [connectedUsers, setConnectedUsers] = useState(1)
+  const [copied, setCopied] = useState(false)
+  const [members, setMembers] = useState([])
+  const [membersLoading, setMembersLoading] = useState(true)
   const wsRef = useRef(null)
   const editorRef = useRef(null)
-  const lastUpdateRef = useRef(Date.now())
+  const retryCountRef = useRef(0)
+  const retryDelayRef = useRef(3000)
+  const maxRetries = 8
+  const maxDelay = 30000
 
   useEffect(() => {
-    // Initialize WebSocket connection
+    retryCountRef.current = 0
+    retryDelayRef.current = 3000
     connectWebSocket()
-    
+    fetchMembers()
     return () => {
       if (wsRef.current) {
         wsRef.current.close()
       }
     }
+    // eslint-disable-next-line
   }, [room._id])
+
+  const fetchMembers = async () => {
+    setMembersLoading(true)
+    try {
+      const response = await api.get(`/api/rooms/${room._id}/members`)
+      setMembers(response.data.members)
+    } catch {
+      setMembers([])
+    } finally {
+      setMembersLoading(false)
+    }
+  }
 
   const connectWebSocket = () => {
     try {
-      const ws = new WebSocket(`${WS_BASE_URL}/ws/${room._id}`)      
+      const ws = new WebSocket(`${WS_BASE_URL}/ws/${room._id}`)
       ws.onopen = () => {
-        console.log('WebSocket connected')
-        setIsConnected(true)
+        retryCountRef.current = 0
+        retryDelayRef.current = 3000
+        if (user?.uid) {
+          ws.send(JSON.stringify({ type: 'auth', user_uid: user.uid }))
+        }
       }
-      
       ws.onmessage = (event) => {
         const message = JSON.parse(event.data)
-        
-        if (message.type === 'code_update') {
-          // Only update if this change is from another user
-          if (Date.now() - lastUpdateRef.current > 100) {
-            setCode(message.code)
-          }
+        if (message.type === 'notification' && message.subtype === 'room_shared') {
+          toast.info(message.message)
+        } else if (message.type === 'code_update') {
+          setCode(message.code)
         } else if (message.type === 'execution_result') {
           setOutput(formatOutput(message.output))
           setIsExecuting(false)
         }
       }
-      
       ws.onclose = () => {
-        console.log('WebSocket disconnected')
-        setIsConnected(false)
-        // Attempt to reconnect after 3 seconds
-        setTimeout(connectWebSocket, 3000)
+        if (retryCountRef.current < maxRetries) {
+          const delay = retryDelayRef.current
+          setTimeout(connectWebSocket, delay)
+          retryCountRef.current += 1
+          retryDelayRef.current = Math.min(retryDelayRef.current * 2, maxDelay)
+        } else {
+          setOutput('Unable to connect to the collaboration server. Please refresh or try again later.')
+        }
       }
-      
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error)
-        setIsConnected(false)
-      }
-      
+      ws.onerror = () => {}
       wsRef.current = ws
-    } catch (error) {
-      console.error('Failed to connect WebSocket:', error)
-    }
+    } catch {}
   }
 
   const handleEditorChange = (value) => {
     setCode(value || '')
-    lastUpdateRef.current = Date.now()
-    
-    // Log the current local time when code changes
-    console.log('Code changed at:', new Date().toLocaleString())
-    
-    // Send code update via WebSocket
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'code_update',
@@ -127,98 +137,84 @@ function CodeEditor({ room }) {
   const handleEditorDidMount = (editor, monaco) => {
     editorRef.current = editor
     
-    // Set Python as the default language
     monaco.editor.setModelLanguage(editor.getModel(), 'python')
     
-    // Configure editor options
     editor.updateOptions({
-      fontSize: 14,
+      fontSize: 15,
+      fontFamily: 'JetBrains Mono, Fira Mono, Menlo, monospace',
       minimap: { enabled: false },
       scrollBeyondLastLine: false,
       automaticLayout: true,
-      wordWrap: 'on'
+      wordWrap: 'on',
+      roundedSelection: true,
+      cursorSmoothCaretAnimation: true,
+      theme: 'vs-dark',
     })
   }
 
-  return (
-    <div className="h-full flex">
-      {/* Code Editor */}
-      <div className="flex-1 flex flex-col">
-        <div className="bg-card border-b p-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h3 className="font-semibold">Code Editor</h3>
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-              <span className="text-sm text-muted-foreground">
-                {isConnected ? 'Connected' : 'Disconnected'}
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={executeCode}
-              disabled={isExecuting || !code.trim()}
-              size="sm"
-              className="flex items-center gap-2"
-            >
-              {isExecuting ? (
-                <>
-                  <Square className="h-4 w-4" />
-                  Running...
-                </>
-              ) : (
-                <>
-                  <Play className="h-4 w-4" />
-                  Run Code
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-        
-        <div className="flex-1">
-          <Editor
-            height="100%"
-            defaultLanguage="python"
-            value={code}
-            onChange={handleEditorChange}
-            onMount={handleEditorDidMount}
-            theme="vs-dark"
-            options={{
-              fontSize: 14,
-              minimap: { enabled: false },
-              scrollBeyondLastLine: false,
-              automaticLayout: true,
-              wordWrap: 'on',
-              tabSize: 4,
-              insertSpaces: true
-            }}
-          />
-        </div>
-      </div>
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    } catch {}
+  }
 
-      {/* Output Panel */}
-      <div className="w-96 border-l flex flex-col">
-        <div className="bg-card border-b p-3">
-          <h3 className="font-semibold flex items-center gap-2">
-            <Terminal className="h-4 w-4" />
-            Output
-          </h3>
-        </div>
-        
-        <div className="flex-1 p-4 bg-black text-green-400 font-mono text-sm overflow-auto">
-          <pre className="whitespace-pre-wrap">{output || 'Run your code to see output here...'}</pre>
-        </div>
-        
-        <div className="border-t p-3 bg-card">
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
+  return (
+    <div className="flex flex-col h-full w-full max-w-5xl mx-auto mt-8">
+      <div className="rounded-2xl shadow-xl bg-zinc-900/95 border border-zinc-800 overflow-hidden flex flex-col h-[70vh]">
+        {/* Header Bar */}
+        <div className="flex items-center justify-between px-6 py-3 bg-zinc-950 border-b border-zinc-800">
+          <div className="flex items-center gap-3">
+            <span className="font-semibold text-lg text-zinc-100 truncate max-w-[180px]">{room.name || 'Untitled.py'}</span>
+            <Badge variant="outline" className="uppercase tracking-wide text-xs">{room.language || 'python'}</Badge>
+          </div>
+          <div className="flex items-center gap-8">
+            {/* Action Buttons */}
             <div className="flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              <span>{connectedUsers} user{connectedUsers !== 1 ? 's' : ''} online</span>
+              <Button size="sm" variant="outline" onClick={executeCode} disabled={isExecuting || !code.trim()} className="flex items-center gap-2">
+                <Play className="h-4 w-4" /> Run
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleCopy} className="flex items-center gap-2">
+                {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />} {copied ? 'Copied!' : 'Copy'}
+              </Button>
             </div>
-            <Badge variant={isConnected ? 'default' : 'destructive'}>
-              {isConnected ? 'Live' : 'Offline'}
-            </Badge>
+          </div>
+        </div>
+       
+        {/* Editor and Output */}
+        <div className="flex flex-1 min-h-0">
+          {/* Monaco Editor */}
+          <div className="flex-1 bg-zinc-950/90">
+            <Editor
+              height="100%"
+              defaultLanguage="python"
+              value={code}
+              onChange={handleEditorChange}
+              onMount={handleEditorDidMount}
+              theme="vs-dark"
+              options={{
+                fontSize: 15,
+                fontFamily: 'JetBrains Mono, Fira Mono, Menlo, monospace',
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                wordWrap: 'on',
+                roundedSelection: true,
+                cursorSmoothCaretAnimation: true,
+                theme: 'vs-dark',
+              }}
+            />
+          </div>
+          {/* Output Panel */}
+          <div className="w-96 border-l flex flex-col bg-zinc-950/80">
+            <div className="bg-zinc-900 border-b p-3 flex items-center gap-2">
+              <Terminal className="h-4 w-4 text-green-400" />
+              <span className="font-semibold text-zinc-200">Output</span>
+            </div>
+            <div className="flex-1 p-4 bg-black text-green-400 font-mono text-sm overflow-auto rounded-b-xl">
+              <pre className="whitespace-pre-wrap">{output || 'Run your code to see output here...'}</pre>
+            </div>
           </div>
         </div>
       </div>
