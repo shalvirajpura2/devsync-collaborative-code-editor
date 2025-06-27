@@ -10,6 +10,7 @@ from src.core.firebase_auth import get_current_user
 from src.models.room import JoinRequest
 from src.services.websocket_manager import manager
 from pydantic import BaseModel, EmailStr, Field
+from firebase_admin import auth as firebase_auth
 
 router = APIRouter()
 
@@ -200,4 +201,20 @@ async def submit_feedback(feedback: FeedbackIn = Body(...)):
         append_feedback_to_gsheet(doc)
     except Exception as e:
         logging.exception("Failed to append feedback to Google Sheets")
-    return {"message": "Feedback submitted successfully."} 
+    return {"message": "Feedback submitted successfully."}
+
+@router.post("/api/auth/forgot-password")
+async def forgot_password(payload: dict = Body(...)):
+    email = payload.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required.")
+    try:
+        user = firebase_auth.get_user_by_email(email)
+    except firebase_auth.UserNotFoundError:
+        raise HTTPException(status_code=404, detail="No account found with this email address.")
+    try:
+        firebase_auth.generate_password_reset_link(email)
+        # Optionally, you can send the link via your own email service, or rely on Firebase's default email
+        return {"message": "Password reset email sent! Please check your inbox."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to send reset email. Please try again later.") 

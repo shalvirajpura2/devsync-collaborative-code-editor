@@ -3,10 +3,11 @@ import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 import { useNavigate } from "react-router-dom";
 import { Button } from '@/components/ui/button';
 import { Github, Mail, Eye, EyeOff, Lock } from 'lucide-react';
-import { sendEmailVerification } from "firebase/auth";
+import { sendEmailVerification, sendPasswordResetEmail, fetchSignInMethodsForEmail } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import DevSyncLogo from '@/assets/devsync-logo.png';
 import AuthGirlImg from '@/assets/auth girl.png';
+import axios from 'axios';
 
 export default function AuthPage() {
   const { user, loading, error, login, signup } = useFirebaseAuth();
@@ -18,6 +19,8 @@ export default function AuthPage() {
   const [resendLoading, setResendLoading] = useState(false);
   const [resendError, setResendError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [forgotMsg, setForgotMsg] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -63,6 +66,25 @@ export default function AuthPage() {
       } catch (err) {
         setResendError("Failed to send verification email.");
       }
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    setForgotMsg("");
+    setForgotLoading(true);
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setForgotMsg("Please enter your email address first.");
+      setForgotLoading(false);
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, trimmedEmail);
+      setForgotMsg("Password reset email sent! Please check your inbox.");
+    } catch (err) {
+      setForgotMsg("Failed to send reset email. Please check the email address and try again.");
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -129,22 +151,39 @@ export default function AuthPage() {
                 autoComplete="email"
               />
             </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="password" className="text-zinc-300 text-sm mb-1">Password</label>
-              <input
-                className="bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full"
-                placeholder="Enter your password"
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-                id="password"
-                autoComplete={isSignup ? "new-password" : "current-password"}
-              />
-            </div>
+            <div className="flex flex-col gap-1 relative">
+  <label htmlFor="password" className="text-zinc-300 text-sm mb-1">Password</label>
+  
+  <input
+    className="bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full pr-12"
+    placeholder="Enter your password"
+    type={showPassword ? "text" : "password"}
+    value={password}
+    onChange={e => setPassword(e.target.value)}
+    required
+    id="password"
+    autoComplete={isSignup ? "new-password" : "current-password"}
+  />
+
+  <button
+    type="button"
+    tabIndex={-1}
+    className="absolute right-3 top-[50px] transform -translate-y-1/2 text-zinc-400 hover:text-indigo-400"
+    onClick={() => setShowPassword(v => !v)}
+    aria-label={showPassword ? 'Hide password' : 'Show password'}
+  >
+    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+  </button>
+</div>
+
             <div className="flex justify-end mb-2">
-              <button type="button" className="text-indigo-400 hover:underline text-sm font-medium transition-all">Forgot password?</button>
+              {!isSignup && (
+                <button type="button" className="text-indigo-400 hover:underline text-sm font-medium transition-all" onClick={handleForgotPassword} disabled={forgotLoading}>Forgot password?</button>
+              )}
             </div>
+            {!isSignup && forgotMsg && (
+              <div className={`mb-2 text-center font-semibold ${forgotMsg.toLowerCase().includes('sent') ? 'text-green-400' : 'text-red-400'}`}>{forgotMsg}</div>
+            )}
             {error && <div className="text-red-400 text-sm text-center font-semibold -mt-2">{getFriendlyError(error)}</div>}
             <Button type="submit" className="w-full text-lg font-semibold shadow-lg py-3 mt-2">
               {loading ? (
