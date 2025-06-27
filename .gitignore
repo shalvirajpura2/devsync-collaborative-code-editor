@@ -190,4 +190,34 @@ Thumbs.db
 serviceAccountKey.json
 *.firebase-adminsdk-*.json
 backend/serviceAccountKey.json
-backend/src/core/serviceAccountKey.json 
+backend/src/core/serviceAccountKey.json
+
+# Environment & secrets
+.env
+.env.*
+backend/.env
+backend/.env.*
+backend/google-credentials.json
+
+# Logs
+*.log
+backend/*.log
+
+# Misc
+*.bak
+*.tmp
+
+# Ignore test coverage
+coverage/
+.nyc_output/
+
+# Ignore static build assets
+backend/src/static/assets/
+
+# Database
+backend/src/database/*.db
+backend/src/database/*.sqlite3
+backend/src/database/*.sqlite
+backend/src/database/*.bak
+backend/src/database/*.log
+backend/src/database/app.db 

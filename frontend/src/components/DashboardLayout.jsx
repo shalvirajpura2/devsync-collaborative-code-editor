@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import DevSyncLogo from '@/assets/devsync-logo.png';
 
 export default function DashboardLayout({ children }) {
   const { user, logout } = useFirebaseAuth();
@@ -298,8 +299,7 @@ export default function DashboardLayout({ children }) {
       <aside className="hidden md:flex fixed z-20 top-0 left-0 h-full w-64 flex-col bg-zinc-900/90 border-r border-zinc-800 pt-0 pb-0">
         <div className="flex flex-col h-full overflow-y-auto p-6 gap-8">
           <div className="flex items-center gap-2 mb-8 mt-2">
-            <Code className="w-7 h-7 text-indigo-400" />
-            <span className="text-2xl font-extrabold bg-gradient-to-r from-indigo-400 via-fuchsia-400 to-pink-400 bg-clip-text text-transparent">DevSync</span>
+            <img src={DevSyncLogo} alt="DevSync Logo" className="w-32 h-12 object-contain shadow-lg" />
           </div>
           <nav className="flex flex-col gap-2">
             {navItems.map((item) => (

@@ -34,7 +34,7 @@ function App() {
                 <RoomSelectionPage key={user.uid} />
               </DashboardLayout>
             ) : (
-              <Navigate to="/auth" />
+              <Navigate to="/" />
             )
           }
         />
@@ -48,7 +48,7 @@ function App() {
                 <EditorPage key={user.uid} />
               </DashboardLayout>
             ) : (
-              <Navigate to="/auth" />
+              <Navigate to="/" />
             )
           }
         />
