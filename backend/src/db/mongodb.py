@@ -12,8 +12,10 @@ db = client.devsync_mongo
 def get_feedback_collection():
     return db["feedback"] 
 
-# Use an absolute path for the credentials file
-GSHEET_CREDENTIALS_FILE = r'D:\manus devsync final\backend\google-credentials.json'
+# Use environment variable for the credentials file
+GSHEET_CREDENTIALS_FILE = os.getenv('GSHEET_CREDENTIALS_FILE')
+if not GSHEET_CREDENTIALS_FILE:
+    GSHEET_CREDENTIALS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'google-credentials.json')
 GSHEET_SHEET_NAME = 'DevSync Feedback'
 
 def append_feedback_to_gsheet(feedback: dict):

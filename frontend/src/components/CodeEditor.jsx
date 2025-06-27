@@ -16,7 +16,7 @@ import { Tabs as OutputTabs, TabsList as OutputTabsList, TabsTrigger as OutputTa
 import { Tooltip } from '@/components/ui/tooltip'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
-const WS_BASE_URL = 'ws://localhost:5000';
+const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || '';
 
 function CodeEditor({ room }) {
   const { user } = useFirebaseAuth();
