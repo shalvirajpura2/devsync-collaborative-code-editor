@@ -150,18 +150,31 @@ async def execute_code_in_room(room_id: str, execute_request: ExecuteCode, user=
             return {"stdout": "", "stderr": "Room not found", "returncode": 1}
         if room["owner"] != user["uid"] and user["uid"] not in room.get("shared_with", []):
             return {"stdout": "", "stderr": "Not authorized to execute code in this room", "returncode": 1}
-        # If multiple test case inputs are provided
+        # If test case inputs are provided
         if execute_request.inputs:
-            outputs = await execute_python_code_multiple(execute_request.code, execute_request.inputs)
-            await db.rooms.update_one(
-                {"_id": ObjectId(room_id)},
-                {"$set": {"last_activity": datetime.now(timezone.utc)}}
-            )
-            await manager.broadcast_to_room(
-                json.dumps({"type": "execution_result", "output": outputs}),
-                room_id
-            )
-            return outputs
+            if len(execute_request.inputs) == 1:
+                from src.services.code_executor import execute_python_code_with_input
+                result = await execute_python_code_with_input(execute_request.code, execute_request.inputs[0])
+                await db.rooms.update_one(
+                    {"_id": ObjectId(room_id)},
+                    {"$set": {"last_activity": datetime.now(timezone.utc)}}
+                )
+                await manager.broadcast_to_room(
+                    json.dumps({"type": "execution_result", "output": result}),
+                    room_id
+                )
+                return result
+            else:
+                outputs = await execute_python_code_multiple(execute_request.code, execute_request.inputs)
+                await db.rooms.update_one(
+                    {"_id": ObjectId(room_id)},
+                    {"$set": {"last_activity": datetime.now(timezone.utc)}}
+                )
+                await manager.broadcast_to_room(
+                    json.dumps({"type": "execution_result", "output": outputs}),
+                    room_id
+                )
+                return outputs
         # Single run as before
         output = await execute_python_code(execute_request.code)
         await db.rooms.update_one(

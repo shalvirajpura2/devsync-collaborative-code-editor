@@ -34,8 +34,8 @@ const features = [
     icon: () => <Share2 className="w-8 h-8 text-fuchsia-400 mb-2 group-hover:scale-125 transition-transform" />,
   },
   {
-    title: 'Developer-Friendly Interface',
-    desc: 'Professional dark theme with a fixed sidebar and responsive layout — built for long, focused sessions.',
+    title: 'Competitive Programming (CP) Mode',
+    desc: 'Run code against multiple test cases, see pass/fail results, and collaborate on problem-solving in real time.',
     icon: () => <Terminal className="w-8 h-8 text-pink-400 mb-2 group-hover:scale-125 transition-transform" />,
   },
 ];

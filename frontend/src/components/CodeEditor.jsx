@@ -33,7 +33,11 @@ function CodeEditor({ room }) {
   const retryDelayRef = useRef(3000)
   const maxRetries = 8
   const maxDelay = 30000
-  const [cpMode, setCpMode] = useState(false)
+  const [cpMode, setCpMode] = useState(() => {
+    // Persist CP mode per room in localStorage
+    const saved = localStorage.getItem(`cpMode_${room._id}`);
+    return saved === null ? false : saved === 'true';
+  });
   const [testCases, setTestCases] = useState([
     { input: '', output: '', expected: '' }
   ])
@@ -47,7 +51,6 @@ function CodeEditor({ room }) {
   const testCasesContainerRef = useRef(null);
   const fileInputRef = useRef(null);
   const [simpleInput, setSimpleInput] = useState('');
-  const [showInputPrompt, setShowInputPrompt] = useState(false);
 
   useEffect(() => {
     retryCountRef.current = 0
@@ -101,7 +104,13 @@ function CodeEditor({ room }) {
         } else if (message.type === 'cp_testcases_update' && Array.isArray(message.testCases)) {
           setTestCases(message.testCases)
         } else if (message.type === 'cp_mode_update' && typeof message.cpMode === 'boolean') {
-          setCpMode(message.cpMode)
+          setCpMode(prev => {
+            if (prev !== message.cpMode) {
+              localStorage.setItem(`cpMode_${room._id}`, message.cpMode);
+              return message.cpMode;
+            }
+            return prev;
+          });
         }
       }
       ws.onclose = () => {
@@ -160,12 +169,18 @@ function CodeEditor({ room }) {
         }
       } else {
         setOutput(outputs.stdout || outputs.stderr || 'No output');
+        if (outputs.stderr && outputs.stderr.trim()) {
+          setOutputTab('errors');
+        } else {
+          setOutputTab('output');
+        }
       }
     } catch (error) {
       if (cpMode) {
         setTestCases(testCases.map(tc => ({ ...tc, output: `Error: ${error.message}` })));
       } else {
         setOutput(`Error: ${error.message}`);
+        setOutputTab('errors');
       }
     } finally {
       setIsExecuting(false);
@@ -294,9 +309,10 @@ function CodeEditor({ room }) {
 
   // Sync CP Mode toggle across users
   const handleCpModeChange = (val) => {
-    setCpMode(val)
+    setCpMode(val);
+    localStorage.setItem(`cpMode_${room._id}`, val);
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'cp_mode_update', cpMode: val }))
+      wsRef.current.send(JSON.stringify({ type: 'cp_mode_update', cpMode: val }));
     }
   }
 
@@ -363,25 +379,18 @@ function CodeEditor({ room }) {
     reader.readAsText(file);
   };
 
-  const handleSendInput = async () => {
-    setIsExecuting(true);
-    setOutput('Executing...');
-    try {
-      const response = await api.post(`/api/rooms/${room._id}/execute`, {
-        code,
-        inputs: [simpleInput]
-      });
-      setOutput(response.data.stdout || response.data.stderr || 'No output');
-      setShowInputPrompt(false);
-    } catch (error) {
-      setOutput(`Error: ${error.message}`);
-    } finally {
-      setIsExecuting(false);
-    }
-  };
-
   return (
     <div className="flex flex-col h-[90vh] w-full max-w-screen-2xl mx-auto">
+      {/* CP Mode Warning Banner */}
+      {cpMode && (
+       <div className="flex items-center gap-3 px-6 py-3 border-b-2 border-red-500 text-red-900 font-bold text-sm">
+       <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12A9 9 0 1 1 3 12a9 9 0 0 1 18 0Z" />
+       </svg>
+       CP Mode is active. All code, test cases, and results are visible to all room members. Please use this mode responsibly.
+     </div>
+     
+      )}
       <div className="rounded-2xl shadow-xl bg-zinc-900/95 border border-zinc-800 overflow-hidden flex flex-col h-full">
         {/* Header Bar */}
         <div className="flex items-center justify-between px-6 py-3 bg-zinc-950 border-b border-zinc-800">
@@ -436,6 +445,7 @@ function CodeEditor({ room }) {
                     {!cpMode ? (
                       <OutputTabs value={outputTab} onValueChange={setOutputTab} className="w-full">
                         <OutputTabsList className="flex gap-2">
+                        <OutputTabsTrigger value="input">Input</OutputTabsTrigger>
                           <OutputTabsTrigger value="output">Output</OutputTabsTrigger>
                           <OutputTabsTrigger value="errors">Errors</OutputTabsTrigger>
                         </OutputTabsList>
@@ -454,19 +464,8 @@ function CodeEditor({ room }) {
                   <div className="flex-1 overflow-auto">
                     {!cpMode ? (
                       <OutputTabs value={outputTab} onValueChange={setOutputTab} className="h-full">
+                        
                         <OutputTabsContent value="output">
-                          {showInputPrompt && (
-                            <div className="flex flex-col gap-2 p-4 border-b border-zinc-800 bg-zinc-950">
-                              <label className="block text-xs text-zinc-400 mb-1">Input required by your code:</label>
-                              <textarea
-                                className="w-full rounded bg-zinc-900 border border-zinc-800 text-zinc-100 p-2 min-h-[40px]"
-                                value={simpleInput}
-                                onChange={e => setSimpleInput(e.target.value)}
-                                placeholder="Enter input for your code"
-                              />
-                              <Button size="sm" variant="primary" onClick={handleSendInput} disabled={isExecuting || !code.trim()} className="w-fit self-end mt-2">Send</Button>
-                            </div>
-                          )}
                           <div ref={outputRef} className="w-full rounded bg-zinc-900 border border-zinc-800 text-zinc-100 p-2 min-h-[120px] whitespace-pre-wrap">
                             {output}
                           </div>
@@ -479,6 +478,17 @@ function CodeEditor({ room }) {
                           <div className="w-full rounded bg-zinc-900 border border-zinc-800 text-red-400 p-2 min-h-[120px] whitespace-pre-wrap">
                             {/* Show only stderr if present */}
                             {output && output.includes('Error:') ? output : 'No errors.'}
+                          </div>
+                        </OutputTabsContent>
+                        <OutputTabsContent value="input">
+                          <div className="flex flex-col gap-2 p-4">
+                            <label className="block text-xs text-zinc-400 mb-1">Input (stdin):</label>
+                            <textarea
+                              className="w-full rounded bg-zinc-900 border border-zinc-800 text-zinc-100 p-2 min-h-[40px]"
+                              value={simpleInput}
+                              onChange={e => setSimpleInput(e.target.value)}
+                              placeholder="Enter input for your code (optional)"
+                            />
                           </div>
                         </OutputTabsContent>
                       </OutputTabs>
@@ -529,28 +539,34 @@ function CodeEditor({ room }) {
                                   <DialogTitle>Batch Add Test Cases</DialogTitle>
                                 </DialogHeader>
                                 <div className="mb-2 text-xs text-zinc-400">
-                                  Paste all test case inputs in the first box, and all expected outputs in the second box. Separate each with <span className="font-mono bg-zinc-800 px-1 rounded">---</span>.<br/>
-                                  <span className="block mt-2 text-zinc-300 font-semibold">Sample Inputs:</span>
-                                  <pre className="bg-zinc-900 border border-zinc-800 rounded p-2 mt-1 text-zinc-200 whitespace-pre-wrap text-xs">5\n1 2 3 4 5\n---\n3\n2 4 6\n---\n4\n1 3 5 7</pre>
-                                  <span className="block mt-2 text-zinc-300 font-semibold">Sample Outputs:</span>
-                                  <pre className="bg-zinc-900 border border-zinc-800 rounded p-2 mt-1 text-zinc-200 whitespace-pre-wrap text-xs">6\n---\n12\n---\n0</pre>
-                                </div>
-                                <div className="flex flex-col gap-2">
-                                  <label className="text-xs text-zinc-400">Inputs (separate each with ---):</label>
-                                  <textarea
-                                    className="w-full rounded bg-zinc-900 border border-zinc-800 text-zinc-100 p-2 min-h-[80px]"
-                                    value={batchInputs}
-                                    onChange={e => setBatchInputs(e.target.value)}
-                                    placeholder={`5\n1 2 3 4 5\n---\n3\n2 4 6\n---\n4\n1 3 5 7`}
-                                  />
-                                  <label className="text-xs text-zinc-400 mt-2">Expected Outputs (separate each with ---):</label>
-                                  <textarea
-                                    className="w-full rounded bg-zinc-900 border border-zinc-800 text-zinc-100 p-2 min-h-[80px]"
-                                    value={batchOutputs}
-                                    onChange={e => setBatchOutputs(e.target.value)}
-                                    placeholder={`6\n---\n12\n---\n0`}
-                                  />
-                                </div>
+  Paste all test case inputs in the first box, and all expected outputs in the second box. Separate each with 
+  <span className="font-mono bg-zinc-800 px-1 rounded">---</span>.<br />
+  
+ 
+</div>
+
+<div className="flex flex-col lg:flex-row gap-4">
+  <div className="flex flex-col w-full lg:w-1/2">
+    <label className="text-xs text-zinc-400 mb-1">Inputs (separate each with ---):</label>
+    <textarea
+      className="w-full rounded bg-zinc-900 border border-zinc-800 text-zinc-100 p-2 min-h-[160px]"
+      value={batchInputs}
+      onChange={e => setBatchInputs(e.target.value)}
+      placeholder={`5\n1 2 3 4 5\n---\n3\n2 4 6\n---\n4\n1 3 5 7`}
+    />
+  </div>
+
+  <div className="flex flex-col w-full lg:w-1/2">
+    <label className="text-xs text-zinc-400 mb-1">Outputs (separate each with ---):</label>
+    <textarea
+      className="w-full rounded bg-zinc-900 border border-zinc-800 text-zinc-100 p-2 min-h-[160px]"
+      value={batchOutputs}
+      onChange={e => setBatchOutputs(e.target.value)}
+      placeholder={`6\n---\n12\n---\n0`}
+    />
+  </div>
+</div>
+
                                 <DialogFooter>
                                   <Button onClick={handleBatchAdd} disabled={!batchInputs.trim()}>Add</Button>
                                   <DialogClose asChild>
