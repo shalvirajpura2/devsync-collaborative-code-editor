@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Any
 
 class Room(BaseModel):
     name: str
@@ -22,6 +22,7 @@ class CodeUpdate(BaseModel):
 
 class ExecuteCode(BaseModel):
     code: str
+    inputs: Optional[List[str]] = None
 
 class ShareRequest(BaseModel):
     share_with_uid: str
@@ -38,4 +39,9 @@ class JoinRequest(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class JoinRequestInDB(JoinRequest):
-    id: str = Field(alias="_id") 
+    id: str = Field(alias="_id")
+
+class ChatMessage(BaseModel):
+    user: str
+    text: str
+    timestamp: str 

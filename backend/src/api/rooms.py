@@ -10,7 +10,7 @@ from src.models.room import (
     ShareRequest, ShareByEmailRequest
 )
 from src.services.websocket_manager import manager
-from src.services.code_executor import execute_python_code
+from src.services.code_executor import execute_python_code, execute_python_code_multiple
 from src.core.firebase_auth import get_current_user
 from firebase_admin import auth as firebase_auth
 
@@ -143,13 +143,39 @@ async def update_code(room_id: str, code_update: CodeUpdate, user=Depends(get_cu
 
 @router.post("/api/rooms/{room_id}/execute")
 async def execute_code_in_room(room_id: str, execute_request: ExecuteCode, user=Depends(get_current_user)):
-    """Execute Python code and broadcast the result if the user is authorized."""
+    """Execute Python code for one or more test cases and broadcast the result if the user is authorized."""
     try:
         room = await db.rooms.find_one({"_id": ObjectId(room_id)})
         if not room:
             return {"stdout": "", "stderr": "Room not found", "returncode": 1}
         if room["owner"] != user["uid"] and user["uid"] not in room.get("shared_with", []):
             return {"stdout": "", "stderr": "Not authorized to execute code in this room", "returncode": 1}
+        # If test case inputs are provided
+        if execute_request.inputs:
+            if len(execute_request.inputs) == 1:
+                from src.services.code_executor import execute_python_code_with_input
+                result = await execute_python_code_with_input(execute_request.code, execute_request.inputs[0])
+                await db.rooms.update_one(
+                    {"_id": ObjectId(room_id)},
+                    {"$set": {"last_activity": datetime.now(timezone.utc)}}
+                )
+                await manager.broadcast_to_room(
+                    json.dumps({"type": "execution_result", "output": result}),
+                    room_id
+                )
+                return result
+            else:
+                outputs = await execute_python_code_multiple(execute_request.code, execute_request.inputs)
+                await db.rooms.update_one(
+                    {"_id": ObjectId(room_id)},
+                    {"$set": {"last_activity": datetime.now(timezone.utc)}}
+                )
+                await manager.broadcast_to_room(
+                    json.dumps({"type": "execution_result", "output": outputs}),
+                    room_id
+                )
+                return outputs
+        # Single run as before
         output = await execute_python_code(execute_request.code)
         await db.rooms.update_one(
             {"_id": ObjectId(room_id)},
@@ -165,8 +191,11 @@ async def execute_code_in_room(room_id: str, execute_request: ExecuteCode, user=
 
 @router.websocket("/ws/{room_id}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str):
-    # WebSocket authentication is not implemented here, but can be added for extra security
     await manager.connect(websocket, room_id)
+    # On connect, send chat history
+    doc = await db.chat_messages.find_one({"room_id": room_id})
+    history = doc["messages"] if doc and "messages" in doc else []
+    await websocket.send_text(json.dumps({"type": "chat_history", "messages": history}))
     try:
         while True:
             data = await websocket.receive_text()
@@ -180,6 +209,17 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
                     }}
                 )
                 await manager.broadcast_to_room(data, room_id, websocket)
+            elif message["type"] in ("cp_mode_update", "cp_testcases_update"):
+                await manager.broadcast_to_room(data, room_id, websocket)
+            elif message["type"] == "chat_message":
+                # Store message in DB
+                await db.chat_messages.update_one(
+                    {"room_id": room_id},
+                    {"$push": {"messages": message}},
+                    upsert=True
+                )
+                await manager.broadcast_to_room(data, room_id)
+                await websocket.send_text(data)
     except WebSocketDisconnect:
         manager.disconnect(websocket, room_id)
 
@@ -306,4 +346,24 @@ async def remove_user_from_room(room_id: str, payload: dict = Body(...), user=De
             "message": f"You have been removed from the room '{room['name']}' by the owner."
         })
     )
-    return {"message": "User access removed from the room."} 
+    return {"message": "User access removed from the room."}
+
+@router.get("/api/rooms/{room_id}/chat")
+async def get_chat_history(room_id: str, user=Depends(get_current_user)):
+    room = await db.rooms.find_one({"_id": ObjectId(room_id)})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["owner"] != user["uid"] and user["uid"] not in room.get("shared_with", []):
+        raise HTTPException(status_code=403, detail="Not authorized to view chat history")
+    doc = await db.chat_messages.find_one({"room_id": room_id})
+    return doc["messages"] if doc and "messages" in doc else []
+
+@router.post("/api/rooms/{room_id}/chat/clear")
+async def clear_chat_history(room_id: str, user=Depends(get_current_user)):
+    room = await db.rooms.find_one({"_id": ObjectId(room_id)})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["owner"] != user["uid"]:
+        raise HTTPException(status_code=403, detail="Only the owner can clear chat history")
+    await db.chat_messages.update_one({"room_id": room_id}, {"$set": {"messages": []}}, upsert=True)
+    return {"message": "Chat history cleared"} 

@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import DevSyncLogo from '@/assets/devsync-logo.png';
 import DashboardImg from '@/assets/dashboard.png';
 import CodeEditorImg from '@/assets/code_editor.png';
-import { Code, Users, Share2, PlayCircle, Mail, Terminal } from 'lucide-react';
+import CpModeImg from '@/assets/cpmode.png';
+import RoomChatImg from '@/assets/room chat.png';
+import { Code, Users, Share2, PlayCircle, Mail, Terminal, MessageCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
 import api from '@/lib/axios';
@@ -12,6 +14,11 @@ const features = [
     title: 'Real-Time Collaborative Editing',
     desc: 'Edit code live with multiple users in the same room — changes appear instantly across all devices.',
     icon: () => <Code className="w-8 h-8 text-indigo-400 mb-2 group-hover:scale-125 transition-transform" />,
+  },
+  {
+    title: 'Real-Time Room Chat',
+    desc: 'Send messages to everyone in your room with persistent chat history. Only the owner can clear chat for all.',
+    icon: () => <MessageCircle className="w-8 h-8 text-blue-400 mb-2 group-hover:scale-125 transition-transform" />,
   },
   {
     title: 'Python Language Support',
@@ -34,8 +41,8 @@ const features = [
     icon: () => <Share2 className="w-8 h-8 text-fuchsia-400 mb-2 group-hover:scale-125 transition-transform" />,
   },
   {
-    title: 'Developer-Friendly Interface',
-    desc: 'Professional dark theme with a fixed sidebar and responsive layout — built for long, focused sessions.',
+    title: 'Competitive Programming (CP) Mode',
+    desc: 'Run code against multiple test cases, see pass/fail results, and collaborate on problem-solving in real time.',
     icon: () => <Terminal className="w-8 h-8 text-pink-400 mb-2 group-hover:scale-125 transition-transform" />,
   },
 ];
@@ -94,6 +101,16 @@ export default function LandingPage() {
   const [typing, setTyping] = useState(true);
   const [terminalLine, setTerminalLine] = useState(0);
   const [modalImg, setModalImg] = useState(null);
+  const screenshots = [
+    { src: DashboardImg, label: 'Dashboard' },
+    { src: CodeEditorImg, label: 'Code Editor' },
+    { src: RoomChatImg, label: 'Room Chat' },
+    { src: CpModeImg, label: 'CP Mode' },
+  ];
+  const [screenshotIdx, setScreenshotIdx] = useState(0);
+  const carouselRef = useRef(null);
+  let touchStartX = null;
+  let touchEndX = null;
 
   // Terminal typewriter effect for multiple lines
   useEffect(() => {
@@ -148,6 +165,30 @@ export default function LandingPage() {
     } catch (err) {
       setFormError('Failed to submit feedback. Please try again later.');
     }
+  };
+
+  const scrollToIdx = (idx) => {
+    setScreenshotIdx(idx);
+    document.getElementById(`screenshot-img-${idx}`)?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  };
+
+  const handleTouchStart = (e) => {
+    touchStartX = e.touches[0].clientX;
+  };
+  const handleTouchMove = (e) => {
+    touchEndX = e.touches[0].clientX;
+  };
+  const handleTouchEnd = () => {
+    if (touchStartX !== null && touchEndX !== null) {
+      const diff = touchStartX - touchEndX;
+      if (diff > 50 && screenshotIdx < screenshots.length - 1) {
+        scrollToIdx(screenshotIdx + 1);
+      } else if (diff < -50 && screenshotIdx > 0) {
+        scrollToIdx(screenshotIdx - 1);
+      }
+    }
+    touchStartX = null;
+    touchEndX = null;
   };
 
   return (
@@ -269,23 +310,143 @@ export default function LandingPage() {
         </div>
       </section>
       {/* Screenshots Section */}
-      <section id="screenshots" className="py-16 px-4 bg-zinc-900/60">
-        <h2 className="text-3xl font-bold mb-8 text-center">See DevSync in Action</h2>
-        <div className="flex flex-col md:flex-row gap-8 justify-center items-center">
-          <div className="flex flex-col items-center cursor-pointer" onClick={() => setModalImg(DashboardImg)}>
-            <img src={DashboardImg} alt="DevSync Dashboard" className="rounded-xl shadow-xl border border-zinc-800 w-[340px] md:w-[420px] mb-4 transition-transform duration-200 hover:scale-105" />
-            <span className="text-zinc-400 text-sm">Dashboard</span>
+      <section id="screenshots" className="py-16 px-4 bg-zinc-900/80 relative overflow-x-hidden">
+        <h2 className="text-3xl font-bold mb-2 text-center">See DevSync in Action</h2>
+        <p className="text-zinc-400 text-center mb-8 text-lg max-w-2xl mx-auto">Screenshots from real sessions: explore the dashboard, code editor, chat, and CP mode. Click any image to enlarge.</p>
+        <div className="relative flex flex-col items-center w-full">
+          <div className="relative flex items-center justify-center w-full max-w-[520px] mx-auto" style={{height: '280px'}}>
+            {/* Left Arrow */}
+            <button
+              className="absolute left-[-48px] top-1/2 -translate-y-1/2 z-20 bg-zinc-900/90 hover:bg-indigo-700/80 text-white rounded-full p-3 focus:outline-indigo-400 focus:outline-2 transition-all duration-200 group hidden md:block"
+              onClick={() => scrollToIdx(Math.max(0, screenshotIdx - 1))}
+              disabled={screenshotIdx === 0}
+              aria-label="Previous screenshot"
+              tabIndex={0}
+              style={{ left: '-48px' }}
+            >
+              <svg width="38" height="38" fill="none" viewBox="0 0 24 24" className="group-hover:drop-shadow-glow"><path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <button
+              className="absolute left-2 top-1/2 -translate-y-1/2 z-20 bg-zinc-900/90 hover:bg-indigo-700/80 text-white rounded-full p-2 focus:outline-indigo-400 focus:outline-2 transition-all duration-200 group md:hidden"
+              onClick={() => scrollToIdx(Math.max(0, screenshotIdx - 1))}
+              disabled={screenshotIdx === 0}
+              aria-label="Previous screenshot"
+              tabIndex={0}
+              style={{ left: '8px' }}
+            >
+              <svg width="28" height="28" fill="none" viewBox="0 0 24 24" className="group-hover:drop-shadow-glow"><path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            {/* Carousel Images */}
+            <div
+              ref={carouselRef}
+              className="overflow-hidden w-full max-w-[420px] h-[260px] md:h-[260px] rounded-xl select-none relative bg-zinc-900"
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
+              <div
+                className="flex transition-transform duration-500 ease-in-out h-full relative"
+                style={{ transform: `translateX(-${screenshotIdx * 100}%)` }}
+              >
+                {screenshots.map((img, idx) => {
+                  const isActive = idx === screenshotIdx;
+                  return (
+                    <div
+                      key={img.label}
+                      className="flex flex-col items-center justify-center w-full min-w-0 max-w-[420px] px-2 relative"
+                      style={{ flex: '0 0 100%' }}
+                    >
+                      <div
+                        className={`flex flex-col items-center cursor-pointer bg-transparent rounded-xl transition-all duration-200 w-full relative ${isActive ? 'z-10' : 'z-0'}`}
+                        onClick={() => { setModalImg(img.src); setScreenshotIdx(idx); }}
+                        tabIndex={isActive ? 0 : -1}
+                        aria-label={`View screenshot: ${img.label}`}
+                        onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && isActive) { setModalImg(img.src); setScreenshotIdx(idx); } }}
+                        style={{
+                          filter: isActive ? 'none' : 'blur(4px) grayscale(0.3) opacity(0.5)',
+                          transform: isActive ? 'scale(1)' : 'scale(0.85)',
+                          transition: 'all 0.5s cubic-bezier(.4,0,.2,1)',
+                        }}
+                      >
+                        <img
+                          src={img.src}
+                          alt={img.label}
+                          className="rounded-xl w-full h-[220px] object-cover mb-3 transition-transform duration-200"
+                        />
+                        <span className="text-zinc-300 text-base font-medium mb-2">{img.label}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            {/* Right Arrow */}
+            <button
+              className="absolute right-[-48px] top-1/2 -translate-y-1/2 z-20 bg-zinc-900/90 hover:bg-indigo-700/80 text-white rounded-full p-3 focus:outline-indigo-400 focus:outline-2 transition-all duration-200 group hidden md:block"
+              onClick={() => scrollToIdx(Math.min(screenshots.length - 1, screenshotIdx + 1))}
+              disabled={screenshotIdx === screenshots.length - 1}
+              aria-label="Next screenshot"
+              tabIndex={0}
+              style={{ right: '-48px' }}
+            >
+              <svg width="38" height="38" fill="none" viewBox="0 0 24 24" className="group-hover:drop-shadow-glow"><path d="M9 5l7 7-7 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <button
+              className="absolute right-2 top-1/2 -translate-y-1/2 z-20 bg-zinc-900/90 hover:bg-indigo-700/80 text-white rounded-full p-2 focus:outline-indigo-400 focus:outline-2 transition-all duration-200 group md:hidden"
+              onClick={() => scrollToIdx(Math.min(screenshots.length - 1, screenshotIdx + 1))}
+              disabled={screenshotIdx === screenshots.length - 1}
+              aria-label="Next screenshot"
+              tabIndex={0}
+              style={{ right: '8px' }}
+            >
+              <svg width="28" height="28" fill="none" viewBox="0 0 24 24" className="group-hover:drop-shadow-glow"><path d="M9 5l7 7-7 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
           </div>
-          <div className="flex flex-col items-center cursor-pointer" onClick={() => setModalImg(CodeEditorImg)}>
-            <img src={CodeEditorImg} alt="DevSync Code Editor" className="rounded-xl shadow-xl border border-zinc-800 w-[340px] md:w-[420px] mb-4 transition-transform duration-200 hover:scale-105" />
-            <span className="text-zinc-400 text-sm">Code Editor</span>
+          {/* Dot indicators */}
+          <div className="flex justify-center gap-3 mt-4">
+            {screenshots.map((_, idx) => (
+              <button
+                key={idx}
+                className={`w-3 h-3 rounded-full border-2 ${screenshotIdx === idx ? 'bg-indigo-400 border-indigo-400 scale-110' : 'bg-zinc-700 border-zinc-600'} transition-all duration-200 focus:outline-indigo-400`}
+                onClick={() => scrollToIdx(idx)}
+                aria-label={`Go to screenshot ${idx + 1}`}
+                tabIndex={0}
+              />
+            ))}
           </div>
         </div>
         {/* Modal for screenshots */}
         {modalImg && (
-          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center" onClick={() => setModalImg(null)}>
-            <img src={modalImg} alt="Screenshot" className="max-w-[90vw] max-h-[80vh] rounded-xl shadow-2xl border-2 border-indigo-400 animate-fadein" />
-            <button className="absolute top-8 right-8 text-white text-3xl font-bold bg-zinc-900/80 rounded-full px-3 py-1 hover:bg-zinc-800 transition" onClick={e => { e.stopPropagation(); setModalImg(null); }}>&times;</button>
+          <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center" style={{padding: '32px 0'}}>
+            <button className="absolute top-8 right-8 text-white text-4xl font-bold bg-zinc-900/90 rounded-full px-4 py-1 hover:bg-zinc-800 transition focus:outline-indigo-400 z-50" onClick={e => { e.stopPropagation(); setModalImg(null); }} aria-label="Close screenshot">&times;</button>
+            <div className="relative flex flex-col items-center w-full max-w-[90vw] max-h-[80vh]">
+              <div className="flex items-center justify-center w-full h-full">
+                <button
+                  className="absolute left-0 top-1/2 -translate-y-1/2 z-40 bg-zinc-900/90 hover:bg-indigo-700/80 text-white rounded-full p-3 focus:outline-indigo-400 focus:outline-2 transition-all duration-200 group"
+                  onClick={e => { e.stopPropagation(); scrollToIdx(Math.max(0, screenshotIdx - 1)); }}
+                  disabled={screenshotIdx === 0}
+                  aria-label="Previous screenshot"
+                  tabIndex={0}
+                  style={{ left: '16px' }}
+                >
+                  <svg width="38" height="38" fill="none" viewBox="0 0 24 24" className="group-hover:drop-shadow-glow"><path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
+                <img src={screenshots[screenshotIdx].src} alt="Screenshot" className="max-w-[90vw] max-h-[80vh] rounded-2xl animate-fadein bg-zinc-900" />
+                <button
+                  className="absolute right-0 top-1/2 -translate-y-1/2 z-40 bg-zinc-900/90 hover:bg-indigo-700/80 text-white rounded-full p-3 focus:outline-indigo-400 focus:outline-2 transition-all duration-200 group"
+                  onClick={e => { e.stopPropagation(); scrollToIdx(Math.min(screenshots.length - 1, screenshotIdx + 1)); }}
+                  disabled={screenshotIdx === screenshots.length - 1}
+                  aria-label="Next screenshot"
+                  tabIndex={0}
+                  style={{ right: '16px' }}
+                >
+                  <svg width="38" height="38" fill="none" viewBox="0 0 24 24" className="group-hover:drop-shadow-glow"><path d="M9 5l7 7-7 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
+              </div>
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-zinc-900/90 text-white px-6 py-2 rounded-full shadow-lg text-lg font-semibold border border-indigo-400">
+                {screenshots[screenshotIdx]?.label}
+              </div>
+            </div>
           </div>
         )}
       </section>
@@ -384,19 +545,11 @@ export default function LandingPage() {
         </div>
       </footer>
       <style>{`
-        .animate-fadein { animation: fadein 1.2s ease-in; }
-        .animate-fadein-up { animation: fadeinUp 1.2s cubic-bezier(.4,0,.2,1); }
-        @keyframes fadein { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
-        @keyframes fadeinUp { from { opacity: 0; transform: translateY(48px); } to { opacity: 1; transform: none; } }
-        .vscode-glow-strong { box-shadow: 0 0 64px 16px #a5b4fc55, 0 2px 32px 0 #000a, 0 1.5px 0 #fff1 inset; }
-        .animate-gradient-move { animation: gradientMove 12s ease-in-out infinite alternate; }
-        @keyframes gradientMove { 0% { filter: hue-rotate(0deg); } 100% { filter: hue-rotate(30deg); } }
-        .animate-float { animation: float 6s ease-in-out infinite alternate; }
-        @keyframes float { 0% { transform: translateY(0); } 100% { transform: translateY(-24px); } }
-        .animate-pulse-on-hover:hover { animation: pulseGlow 0.7s cubic-bezier(.4,0,.2,1); }
-        @keyframes pulseGlow { 0% { box-shadow: 0 0 0 0 #a5b4fc55; } 70% { box-shadow: 0 0 32px 16px #a5b4fc55; } 100% { box-shadow: 0 0 0 0 #a5b4fc55; } }
-        .animate-blink { animation: blink 1.2s steps(2, start) infinite; }
-        @keyframes blink { to { visibility: hidden; } }
+        .animate-fadein { animation: fadein 0.7s cubic-bezier(.4,0,.2,1); }
+        @keyframes fadein { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
+        .drop-shadow-glow { filter: drop-shadow(0 0 16px #6366f1cc); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
     </div>
   );
