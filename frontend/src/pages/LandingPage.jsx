@@ -8,6 +8,7 @@ import { Code, Users, Share2, PlayCircle, Mail, Terminal, MessageCircle } from '
 import { useNavigate } from 'react-router-dom';
 import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
 import api from '@/lib/axios';
+import { getIdToken } from "firebase/auth";
 
 const features = [
   {
@@ -133,6 +134,14 @@ export default function LandingPage() {
     }
     return () => clearTimeout(timeout);
   }, [typed, typing, terminalLine]);
+
+  useEffect(() => {
+    if (user) {
+      user.getIdToken().then(token => {
+        // console.log('Firebase ID Token:', token);
+      });
+    }
+  }, [user]);
 
   const handleGetStarted = () => {
     if (user) {
