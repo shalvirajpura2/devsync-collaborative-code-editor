@@ -12,7 +12,7 @@ import { getIdToken } from "firebase/auth";
 
 const features = [
   {
-    title: 'Real-Time Collaborative Editing',
+    title: 'Real Time Collaborative Editing',
     desc: 'Edit code live with multiple users in the same room — changes appear instantly across all devices.',
     icon: () => <Code className="w-8 h-8 text-indigo-400 mb-2 group-hover:scale-125 transition-transform" />,
   },
