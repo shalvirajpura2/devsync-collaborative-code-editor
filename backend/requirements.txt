@@ -23,6 +23,5 @@ Werkzeug==3.0.2
 gspread
 google-auth
 firebase-admin
-bson
 google-auth-oauthlib
 gunicorn
