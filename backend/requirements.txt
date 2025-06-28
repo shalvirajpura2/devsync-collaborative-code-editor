@@ -25,3 +25,4 @@ google-auth
 firebase-admin
 bson
 google-auth-oauthlib
+gunicorn
