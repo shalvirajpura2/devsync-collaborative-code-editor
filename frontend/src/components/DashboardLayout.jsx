@@ -255,7 +255,7 @@ export default function DashboardLayout({ children }) {
   // Real-time WebSocket notifications only
   useEffect(() => {
     if (!user) return;
-    const wsUrl = `wss://devsync-backend-erdnbdbpb7azcdet.westindia-01.azurewebsites.net/ws/notifications`;
+    const wsUrl = `${import.meta.env.VITE_WS_BASE_URL}/ws/notifications`;
     const ws = new WebSocket(wsUrl);
     ws.onopen = () => {
       if (user?.uid) {
