@@ -42,9 +42,10 @@ export default function DashboardLayout({ children }) {
     if (!user) return;
     try {
       const response = await api.get('/api/requests/pending');
-      setPendingRequests(response.data);
+      setPendingRequests(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
-      toast.error("Failed to fetch join requests.");
+      console.error("Failed to fetch pending requests:", error);
+      setPendingRequests([]); // Ensure it's always an array
     }
   };
 
@@ -89,9 +90,13 @@ export default function DashboardLayout({ children }) {
           api.get('/api/requests/pending'),
           api.get('/api/requests/my')
         ]);
-        setPendingRequests(pending.data);
-        setMyRequests(my.data);
-      } catch {}
+        setPendingRequests(Array.isArray(pending.data) ? pending.data : []);
+        setMyRequests(Array.isArray(my.data) ? my.data : []);
+      } catch (error) {
+        console.error("Failed to fetch requests:", error);
+        setPendingRequests([]);
+        setMyRequests([]);
+      }
     };
     fetchData();
     const interval = setInterval(fetchData, 10000);
@@ -250,7 +255,8 @@ export default function DashboardLayout({ children }) {
   // Real-time WebSocket notifications only
   useEffect(() => {
     if (!user) return;
-    const ws = new WebSocket(`${import.meta.env.VITE_WS_BASE_URL || `ws://${window.location.host}`}/ws/notifications`);
+    const wsUrl = `wss://devsync-backend-erdnbdbpb7azcdet.westindia-01.azurewebsites.net/ws/notifications`;
+    const ws = new WebSocket(wsUrl);
     ws.onopen = () => {
       if (user?.uid) {
         ws.send(JSON.stringify({ type: 'auth', user_uid: user.uid }));
@@ -262,8 +268,12 @@ export default function DashboardLayout({ children }) {
         setNotifications((prev) => [message, ...prev]);
       }
     };
-    ws.onerror = () => {};
-    ws.onclose = () => {};
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+    ws.onclose = () => {
+      console.log("WebSocket connection closed");
+    };
     wsRef.current = ws;
     return () => {
       ws.close();

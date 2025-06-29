@@ -13,7 +13,17 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': 'http://localhost:5000', // or your backend port
+      '/api': {
+        target: 'https://devsync-backend-erdnbdbpb7azcdet.westindia-01.azurewebsites.net',
+        changeOrigin: true,
+        secure: true,
+      },
+      '/ws': {
+        target: 'https://devsync-backend-erdnbdbpb7azcdet.westindia-01.azurewebsites.net',
+        changeOrigin: true,
+        secure: true,
+        ws: true,
+      },
     },
   },
   define: {
