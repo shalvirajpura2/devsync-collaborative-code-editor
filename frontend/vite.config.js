@@ -16,4 +16,8 @@ export default defineConfig({
       '/api': 'http://localhost:5000', // or your backend port
     },
   },
+  define: {
+    // Ensure environment variables are available at build time
+    'process.env': {}
+  }
 })
