@@ -222,6 +222,9 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
                 await websocket.send_text(data)
     except WebSocketDisconnect:
         manager.disconnect(websocket, room_id)
+    except RuntimeError as e:
+        print(f"WebSocket send error: {e}")
+    
 
 @router.post("/api/rooms/{room_id}/share")
 async def share_room(room_id: str, share_request: ShareRequest, user=Depends(get_current_user)):
